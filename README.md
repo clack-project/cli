@@ -31,6 +31,22 @@ clack token list --json
 clack token revoke 123 --yes
 ```
 
+### 승인 대기 중 실행이 끊기는 경우(에이전트용)
+
+`login`은 코드를 발급한 즉시(폴링을 시작하기 전에) 그 요청을 자격 저장소 옆에 0600 권한으로 저장해 둔다. 그래서 승인을 기다리는 도중에 프로세스가 끝나도(에이전트가 턴을 종료하는 경우 등) 승인 자체는 유실되지 않는다 — 다음 실행에서 `clack login --resume`으로 같은 코드를 이어서 기다리면 된다.
+
+```sh
+clack login --no-wait --json   # 코드만 발급하고 즉시 반환 (user_code·주소·만료 시각을 JSON으로 출력)
+# … 사용자가 앱에서 승인할 시간을 준다(턴 종료 등) …
+clack login --resume           # 같은 요청을 이어서 기다리다가 승인되면 저장한다
+```
+
+`--no-wait` 없이 그냥 `clack login`을 실행했다가 대기 중 중단된 경우에도 `clack login --resume`으로 이어받을 수 있다. `--resume`은 새 코드를 발급하지 않으며, 저장된 요청이 이미 만료·거부·소비됐으면(`EXPIRED_TOKEN`·`ACCESS_DENIED`·`DEVICE_CODE_CONSUMED`) 그 사실을 분명한 오류 코드로 알리고 자동으로 새 요청을 만들지 않는다 — 이때는 `clack login`을 다시 실행한다. 저장된 요청이 없으면 `DEVICE_REQUEST_NOT_FOUND`, 발급 당시와 다른 `--env`·`--base-url`로 재개를 시도하면 `DEVICE_REQUEST_ORIGIN_MISMATCH`를 반환한다(둘 다 요청을 지우지 않으므로 `--env`를 바로잡아 다시 시도할 수 있다). `--resume`은 `--token`과 함께 쓸 수 없다.
+
+```sh
+clack login --resume --env dev   # 발급 당시와 같은 환경이어야 한다. 다르면 DEVICE_REQUEST_ORIGIN_MISMATCH
+```
+
 ## 주요 명령
 
 세부 필드·선택지는 각 명령의 `--help`에서 확인한다.
@@ -89,7 +105,7 @@ clack channel post create --from-markdown draft.md --status draft
 
 CLI 안내는 한국어다. `lang`은 API 콘텐츠 언어에 사용한다. `--verbose`는 메서드·경로·시간 계약만 표준 오류로 표시한다. `doctor`는 현재 연결·권한·만료와 서버 메타 API의 한도·읽기/쓰기·MCP·디바이스 연결 상태를 검사한다. 메타 조회 실패는 오류로 반환한다.
 
-`--json` 성공 결과는 `{ok:true,data,pagination?,time_contract}`, 실패 결과는 `{ok:false,status,code,message,retry_after?}`다. 시간 문자열은 API 원문과 `time_contract`를 함께 유지한다. 사람용 출력은 알려진 시각 필드에 중앙 파서를 적용하며 `--time utc`로 실제 UTC를 표시할 수 있다. 생년월일과 본문은 시간으로 변환하지 않는다.
+`--json` 성공 결과는 `{ok:true,data,pagination?,time_contract}`, 실패 결과는 `{ok:false,status,code,message,retry_after?}`다. 시간 문자열은 API 원문과 `time_contract`를 함께 유지한다. 사람용 출력은 알려진 시각 필드에 중앙 파서를 적용하며 `--time utc`로 실제 UTC를 표시할 수 있다. 생년월일과 본문은 시간으로 변환하지 않는다. 기본값(`--time local`)은 실행 환경의 로캘·타임존과 무관하게 `YYYY-MM-DD HH:MM KST` 고정 형식으로 표시한다(클랙 서비스는 항상 한국 시간 기준이다).
 
 | 종료 코드 | 의미 |
 |---|---|

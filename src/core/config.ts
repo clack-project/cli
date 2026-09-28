@@ -20,6 +20,16 @@ export interface Credential {
   token: string; base_url: string; scopes: string[]; expires_at: string;
   user?: { id: number; name: string | null; avatar?: string | null }; token_id?: number;
 }
+/**
+ * 디바이스 코드 발급 직후 저장하는 대기 중 로그인 요청(E1). `device_code`는 토큰과 마찬가지로
+ * 교부 즉시 자격이 되는 비밀값이라 credentials.json과 같은 취급(0600·원자적 쓰기)을 한다.
+ * `expires_at`은 발급 시점에 확정한 절대 만료 시각이다 — 재개(`login --resume`) 시 서버가 원래
+ * 허용한 시간보다 더 기다리지 않도록, 매번 새 10분을 받는 것처럼 계산하지 않는다.
+ */
+export interface PendingDeviceRequest {
+  device_code: string; user_code: string; verification_uri: string; verification_uri_complete: string;
+  interval: number; scopes: string[]; base_url: string; expires_at: string; created_at: string;
+}
 export interface ResolvedConfig {
   profile: string; baseUrl: string; token?: string; credential?: Credential; tokenFromEnv: boolean;
   options: GlobalOptions; lang: string;
@@ -60,7 +70,8 @@ export class ConfigStore {
     try {
       const stat = await lstat(path);
       if (!stat.isFile() || stat.isSymbolicLink()) throw new CliError('설정 파일은 일반 파일이어야 합니다.', 'CONFIG_UNSAFE');
-      if (name === 'credentials.json' && process.platform !== 'win32') await chmod(path, 0o600);
+      // device-request.json의 device_code는 토큰급 비밀값이라 credentials.json과 같이 방어적으로 0600을 강제한다.
+      if ((name === 'credentials.json' || name === 'device-request.json') && process.platform !== 'win32') await chmod(path, 0o600);
       const body: unknown = JSON.parse(await readFile(path, 'utf8'));
       if (!body || typeof body !== 'object' || !('profiles' in body) || !body.profiles || typeof body.profiles !== 'object' || Array.isArray(body.profiles)) throw new Error('형식');
       return body as { profiles: Record<string, T> };
@@ -119,6 +130,21 @@ export class ConfigStore {
     const all = await this.read<Credential>('credentials.json');
     delete all.profiles[validateProfile(profile)];
     await this.write('credentials.json', all);
+  }
+  /** 발급한 디바이스 요청을 저장해 `login`이 같은 턴에서 끝나도 `login --resume`으로 이어받을 수 있게 한다(E1). */
+  async savePendingDeviceRequest(profile: string, request: PendingDeviceRequest): Promise<void> {
+    const all = await this.read<PendingDeviceRequest>('device-request.json');
+    all.profiles[validateProfile(profile)] = request;
+    await this.write('device-request.json', all);
+  }
+  async getPendingDeviceRequest(profile: string): Promise<PendingDeviceRequest | undefined> {
+    return (await this.read<PendingDeviceRequest>('device-request.json')).profiles[validateProfile(profile)];
+  }
+  /** 만료·거부·소비 등으로 더 이상 재개할 수 없는 요청을 정리한다. 네트워크 오류처럼 일시적인 실패에는 호출하지 않는다. */
+  async removePendingDeviceRequest(profile: string): Promise<void> {
+    const all = await this.read<PendingDeviceRequest>('device-request.json');
+    delete all.profiles[validateProfile(profile)];
+    await this.write('device-request.json', all);
   }
   async getConfig(profile: string): Promise<ProfileConfig> { return (await this.read<ProfileConfig>('config.json')).profiles[validateProfile(profile)] ?? {}; }
   async setConfig(profile: string, key: string, value: string): Promise<void> {

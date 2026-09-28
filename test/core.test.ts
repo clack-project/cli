@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, stat, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { ApiClient } from '../src/core/api.js';
 import { apiError, CliError } from '../src/core/errors.js';
 import { ConfigStore, validateBaseUrl, validateToken } from '../src/core/config.js';
-import { redact, rememberSecret } from '../src/core/secrets.js';
+import { redact, redactText, rememberSecret } from '../src/core/secrets.js';
 import { displayData, formatInstant, requestTimeContract } from '../src/core/time.js';
 import { currentToken, parseScopes, pollDevice, registerAuthCommands } from '../src/commands/auth.js';
 import { registerConfigCommands } from '../src/commands/config.js';
@@ -19,7 +19,10 @@ const mockFetch = (fn: (url: URL, init: RequestInit) => Response | Promise<Respo
 
 function commandFixture(api: ApiClient) {
   const outputs: unknown[] = [];
-  const program = new Command().option('--dry-run');
+  // 실제 cli.ts의 전역 --env·--base-url도 최소한으로 재현해 로그인 원점 불일치 같은 전역 옵션 의존 동작을 검증한다.
+  const program = new Command().option('--dry-run')
+    .addOption(new Option('--env <environment>', 'API 환경').choices(['prod', 'dev']))
+    .option('--base-url <url>', 'API 원점 직접 지정');
   const runtime: Runtime = { action(command, handler) {
     command.action(async (...values: unknown[]) => {
       const cmd = values.at(-1) as Command;
@@ -475,4 +478,146 @@ test('만료 직전에 새 폴링을 시작하지 않는다', async () => {
   const api = new ApiClient({ baseUrl: 'https://v4-api.dev.clack.kr', fetch: mockFetch(() => { throw new Error('호출되면 실패'); }) });
   await assert.rejects(pollDevice(api, { device_code: 'secret', user_code: 'ABCD-2345', verification_uri: '', verification_uri_complete: '', expires_in: 4, interval: 5 },
     { now: () => now, sleep: async ms => { now += ms; } }), { code: 'EXPIRED_TOKEN' });
+});
+
+test('사람용 만료 시각은 로캘·타임존 환경과 무관하게 고정 형식(YYYY-MM-DD HH:MM KST)이다(E9)', () => {
+  assert.equal(formatInstant('2026-10-28T09:03:36.000Z', 'utc-v1', 'local'), '2026-10-28 18:03 KST');
+  // 자정을 넘어가는 KST 환산(날짜 이월)도 고정 형식으로 정확히 표시한다.
+  assert.equal(formatInstant('2026-01-01T15:30:00.000Z', 'utc-v1', 'local'), '2026-01-02 00:30 KST');
+  // legacy-kst(가짜 Z)도 같은 고정 형식을 쓴다.
+  assert.equal(formatInstant('2026-09-19T09:00:00.000Z', 'legacy-kst', 'local'), '2026-09-19 09:00 KST');
+  const output = formatInstant('2026-10-28T09:03:36.000Z', 'utc-v1', 'local');
+  // 예전 Intl.DateTimeFormat('ko-KR', {dateStyle, timeStyle})는 실행 환경에 따라 'PM 6시'·'오후 7시'처럼
+  // 오전/오후 표기가 갈렸다(E9). 24시간제 숫자만 쓰므로 어떤 오전/오후 표기도 나오지 않아야 한다.
+  assert.doesNotMatch(output, /AM|PM|오전|오후/);
+});
+
+test('로그인은 대기 중 턴이 끝나도 발급된 요청을 저장해 두어 --resume으로 같은 코드를 이어받아 완료한다(E1, 발급→중단→재개 성공)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-e1-resume-test-'));
+  const originalFetch = globalThis.fetch;
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    const deviceCode = `dvc_${'c'.repeat(64)}`;
+    let issueCalls = 0;
+    const issueApi = new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(() => {
+      issueCalls++;
+      return response({ data: { device_code: deviceCode, user_code: 'ABCD-2345', verification_uri: 'https://clack.kr/device',
+        verification_uri_complete: 'https://clack.kr/device/ABCD-2345', expires_in: 600, interval: 5 } });
+    }) });
+    // 1) 발급 — --no-wait로 코드만 받고 승인은 기다리지 않는다(에이전트가 턴을 끝내는 상황의 재현).
+    const issueFixture = commandFixture(issueApi);
+    registerAuthCommands(issueFixture.program, issueFixture.runtime, store);
+    const written: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    (process.stdout as unknown as { write: typeof process.stdout.write }).write = ((chunk: unknown) => { written.push(String(chunk)); return true; }) as typeof process.stdout.write;
+    try { await issueFixture.program.parseAsync(['login', '--no-wait'], { from: 'user' }); }
+    finally { process.stdout.write = original; }
+    assert.equal(issueCalls, 1);
+    assert.match(written.join(''), /clack login --resume/);
+    if (process.platform !== 'win32') assert.equal((await stat(join(directory, 'device-request.json'))).mode & 0o777, 0o600);
+
+    // 2) 재개 — 별도 프로세스를 흉내 낸 새 program/runtime이 같은 device_code로 폴링해 완료한다.
+    let pollCalls = 0;
+    let sentDeviceCode = '';
+    globalThis.fetch = mockFetch((_url, init) => {
+      pollCalls++;
+      sentDeviceCode = JSON.parse(String(init.body)).device_code;
+      return response({ data: { token, scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z', user: { id: 1, name: '합성' } } });
+    });
+    const resumeFixture = commandFixture(new ApiClient({ baseUrl: 'https://v4-api.clack.kr' }));
+    registerAuthCommands(resumeFixture.program, resumeFixture.runtime, store);
+    await resumeFixture.program.parseAsync(['login', '--resume'], { from: 'user' });
+    assert.equal(issueCalls, 1, '재개는 새 디바이스 코드를 발급하지 않는다');
+    assert.equal(pollCalls, 1);
+    assert.equal(sentDeviceCode, deviceCode);
+    const resolved = await store.resolve({});
+    assert.equal(resolved.token, token);
+    // 완료 후 대기 요청은 정리되어 남지 않는다.
+    assert.equal(await store.getPendingDeviceRequest(resolved.profile), undefined);
+  } finally { globalThis.fetch = originalFetch; await rm(directory, { recursive: true, force: true }); }
+});
+
+test('만료된 뒤 --resume하면 새 요청을 만들지 않고 EXPIRED_TOKEN으로 실패하며 대기 파일을 정리한다(E1, 만료)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-e1-expired-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    const resolved = await store.resolve({}, true);
+    await store.savePendingDeviceRequest(resolved.profile, {
+      device_code: `dvc_${'d'.repeat(64)}`, user_code: 'ABCD-2345', verification_uri: 'https://clack.kr/device',
+      verification_uri_complete: 'https://clack.kr/device/ABCD-2345', interval: 5, scopes: ['profile:read'],
+      base_url: 'https://v4-api.clack.kr', expires_at: new Date(Date.now() - 1000).toISOString(), created_at: new Date(Date.now() - 601_000).toISOString(),
+    });
+    const noPoll = () => { throw new Error('만료된 요청은 폴링을 호출하면 안 된다'); };
+    const fixture = commandFixture(new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(noPoll) }));
+    registerAuthCommands(fixture.program, fixture.runtime, store);
+    await assert.rejects(fixture.program.parseAsync(['login', '--resume'], { from: 'user' }), { code: 'EXPIRED_TOKEN' });
+    assert.equal(await store.getPendingDeviceRequest(resolved.profile), undefined);
+    // 정리됐으므로 다시 --resume해도(별도 프로세스를 흉내 낸 새 fixture) 새로 만들지 않고 분명한 코드로 실패한다.
+    const retry = commandFixture(new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(noPoll) }));
+    registerAuthCommands(retry.program, retry.runtime, store);
+    await assert.rejects(retry.program.parseAsync(['login', '--resume'], { from: 'user' }), { code: 'DEVICE_REQUEST_NOT_FOUND' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('디바이스 승인이 거부되면 명확한 코드로 실패하고 대기 요청이 정리되어 다시 --resume해도 자동으로 새 요청을 만들지 않는다(E1, 거부)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-e1-denied-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    const deviceCode = `dvc_${'e'.repeat(64)}`;
+    const api = new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(url => {
+      if (url.pathname.endsWith('/device/code')) return response({ data: { device_code: deviceCode, user_code: 'ABCD-2345',
+        verification_uri: 'https://clack.kr/device', verification_uri_complete: 'https://clack.kr/device/ABCD-2345', expires_in: 600, interval: 5 } });
+      return response({ code: 'ACCESS_DENIED', message: '거부됨' }, 400);
+    }) });
+    const fixture = commandFixture(api);
+    registerAuthCommands(fixture.program, fixture.runtime, store);
+    await assert.rejects(fixture.program.parseAsync(['login'], { from: 'user' }), { code: 'ACCESS_DENIED' });
+    const resolved = await store.resolve({}, true);
+    assert.equal(await store.getPendingDeviceRequest(resolved.profile), undefined);
+    const retry = commandFixture(new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(() => { throw new Error('정리된 뒤에는 --resume이 폴링을 호출하면 안 된다'); }) }));
+    registerAuthCommands(retry.program, retry.runtime, store);
+    await assert.rejects(retry.program.parseAsync(['login', '--resume'], { from: 'user' }), { code: 'DEVICE_REQUEST_NOT_FOUND' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('저장된 요청과 다른 환경을 --env로 명시해 --resume하면 원점 불일치로 실패하고 요청을 그대로 보존한다(E1, 원점 불일치)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-e1-mismatch-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    const resolved = await store.resolve({}, true);
+    await store.savePendingDeviceRequest(resolved.profile, {
+      device_code: `dvc_${'1'.repeat(64)}`, user_code: 'ABCD-2345', verification_uri: 'https://dev.clack.kr/device',
+      verification_uri_complete: 'https://dev.clack.kr/device/ABCD-2345', interval: 5, scopes: ['profile:read'],
+      base_url: 'https://v4-api.dev.clack.kr', expires_at: new Date(Date.now() + 500_000).toISOString(), created_at: new Date().toISOString(),
+    });
+    const fixture = commandFixture(new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(() => { throw new Error('원점이 다르면 폴링을 호출하면 안 된다'); }) }));
+    registerAuthCommands(fixture.program, fixture.runtime, store);
+    await assert.rejects(fixture.program.parseAsync(['login', '--resume', '--env', 'prod'], { from: 'user' }), { code: 'DEVICE_REQUEST_ORIGIN_MISMATCH' });
+    // 새 요청을 만들지 않고, 저장된 요청도 지우지 않아 올바른 환경으로 다시 --resume하면 이어받을 수 있다.
+    assert.ok(await store.getPendingDeviceRequest(resolved.profile));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('저장된 디바이스 요청은 0600으로 보관되고 device_code는 출력·오류 메시지에서 가려진다(E1, 비밀 비노출)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-e1-secret-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    const deviceCode = `dvc_${'f'.repeat(64)}`;
+    const api = new ApiClient({ baseUrl: 'https://v4-api.clack.kr', fetch: mockFetch(() => response({ data: {
+      device_code: deviceCode, user_code: 'ABCD-2345', verification_uri: 'https://clack.kr/device',
+      verification_uri_complete: 'https://clack.kr/device/ABCD-2345', expires_in: 600, interval: 5 } })) });
+    const fixture = commandFixture(api);
+    registerAuthCommands(fixture.program, fixture.runtime, store);
+    const written: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    (process.stdout as unknown as { write: typeof process.stdout.write }).write = ((chunk: unknown) => { written.push(String(chunk)); return true; }) as typeof process.stdout.write;
+    try { await fixture.program.parseAsync(['login', '--no-wait', '--no-qr'], { from: 'user' }); }
+    finally { process.stdout.write = original; }
+    assert.ok(!written.join('').includes(deviceCode), '표준 출력에 device_code 원문이 노출되면 안 된다');
+    if (process.platform !== 'win32') assert.equal((await stat(join(directory, 'device-request.json'))).mode & 0o777, 0o600);
+    const raw = await readFile(join(directory, 'device-request.json'), 'utf8');
+    assert.ok(raw.includes(deviceCode), '재개를 위해 파일 자체에는 원문이 있어야 한다');
+    // 이 값이 다른 경로(예: 오류 메시지 반영)로 다시 나와도 redact가 가려야 한다.
+    assert.ok(!redactText(`오류: ${deviceCode}`).includes(deviceCode));
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
