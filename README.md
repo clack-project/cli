@@ -23,12 +23,12 @@ clack logout
 
 수동 발급한 토큰은 `clack login --token`의 숨김 프롬프트에 붙여 넣는다. 비대화형 실행에서는 이 명령의 표준 입력으로 전달할 수 있다. `--token <값>`도 지원하지만 셸 기록을 피하려면 프롬프트나 `CLACK_TOKEN` 환경변수를 사용한다. 토큰 원문은 정상 결과·오류·상세 로그에 출력하지 않는다.
 
-승인 코드·주소는 표준 오류에, 최종 결과는 표준 출력에 기록한다. `--json`에서는 QR과 브라우저 자동 열기를 생략한다. 승인이 거부·만료되거나 토큰 교부 응답을 받지 못하면 자동으로 새 연결을 만들지 않는다. 앱에서 기존 연결을 확인한 후 다시 로그인한다.
+승인 코드·주소는 표준 오류에, 최종 결과는 표준 출력에 기록한다. `--json`에서는 QR과 브라우저 자동 열기를 생략하며, `--no-qr`로 QR만 따로 끌 수 있다(에이전트·비대화형 환경에 적합). 승인이 거부·만료되거나 토큰 교부 응답을 받지 못하면 자동으로 새 연결을 만들지 않는다. 앱에서 기존 연결을 확인한 후 다시 로그인한다.
 
 ```sh
 clack login --env dev --scopes profile,product,content --no-browser
-clack --profile dev token list --json
-clack --profile dev token revoke 123 --yes
+clack token list --json
+clack token revoke 123 --yes
 ```
 
 ## 주요 명령
@@ -80,12 +80,12 @@ clack channel post create --from-markdown draft.md --status draft
 
 기본 설정은 macOS/Linux의 `~/.config/clack/`, Windows의 `%APPDATA%\\clack\\`에 저장한다. `XDG_CONFIG_HOME`과 별도 격리용 `CLACK_CONFIG_DIR`도 지원한다. 자격 파일 `credentials.json`은 POSIX에서 `0600`, 폴더는 `0700`이다. 프로필마다 연결한 API 원점을 함께 보관하며 다른 주소에 저장된 토큰을 자동 전송하지 않는다.
 
-- API 주소: `--base-url` → `CLACK_API_BASE` → `--env`/프로필 설정 → 기본 운영 주소 순서.
-- 프로필: `--profile` → `CLACK_PROFILE` → `--env` → `prod` 순서.
+- 프로필: `--profile` → `CLACK_PROFILE` → 기본 프로필(`default`) 순서. `--env`는 프로필을 바꾸지 않는다 — 어떤 프로필이든 그 프로필이 가리키는 환경(주소)만 고른다.
+- API 주소: `--base-url` → `CLACK_API_BASE` → (`--env`가 있으면 그 환경의 기본 주소, 없으면 프로필에 저장된 주소) → 프로필의 `env` 설정(없으면 운영) 기본 주소 순서.
 - 토큰: `CLACK_TOKEN` → 해당 프로필의 저장된 토큰 순서.
 - 설정 키: `env`, `base_url`, `time`(`local`/`utc`), `lang`(`ko`/`en`), `output`(`human`/`json`).
 
-`config set env dev`처럼 환경을 변경하면 이전에 저장한 `base_url`을 지우고 새 환경의 기본 주소를 사용한다. 기존 토큰의 원점이 다르면 다시 로그인해야 한다. `token list --cursor <값>`으로 50개 이후의 연결도 조회할 수 있다.
+`config set env dev` 후 로그인하거나 `login --env dev`로 바로 연결하거나(또는 둘을 섞어도) 같은 기본 프로필의 같은 dev 자격을 쓴다. 이후 명령에 `--env dev`를 붙이거나 떼도 결과가 바뀌지 않는다. 명시적으로 다른 환경(예: `--env prod`)을 고르면 그 환경을 따르며, 그 환경의 자격이 없으면 다시 로그인해야 한다. 여러 계정·환경을 동시에 쓰려면 `--profile <이름>`으로 별도 프로필을 만든다. `config set env dev`처럼 환경을 변경하면 이전에 저장한 `base_url`을 지우고 새 환경의 기본 주소를 사용한다. 기존 토큰의 원점이 다르면 다시 로그인해야 한다. (이전 개발 빌드에서 기본 프로필 이름으로 쓰던 `prod`도 그대로 이어서 인식한다.) `token list --cursor <값>`으로 50개 이후의 연결도 조회할 수 있다.
 
 CLI 안내는 한국어다. `lang`은 API 콘텐츠 언어에 사용한다. `--verbose`는 메서드·경로·시간 계약만 표준 오류로 표시한다. `doctor`는 현재 연결·권한·만료와 서버 메타 API의 한도·읽기/쓰기·MCP·디바이스 연결 상태를 검사한다. 메타 조회 실패는 오류로 반환한다.
 

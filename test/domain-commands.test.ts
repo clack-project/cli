@@ -49,6 +49,17 @@ test('단건 상품 생성은 서버 legacy 계약과 업로드 썸네일을 보
   await h.run(['product', 'create', '-f', join(dir, 'product.json')]);
   assert.ok(h.calls[0].body instanceof FormData); assert.deepEqual(h.calls[1].body.images, ['https://storage.dev.clack.kr/new.png']); assert.equal(h.calls[1].body.thumbnail_400, 'https://storage.dev.clack.kr/thumb.png'); assert.equal(h.outputs[0].time_contract, 'legacy-kst');
 }));
+test('이미지 업로드는 로컬 원본 파일명 대신 무작위 파일명(확장자 유지)을 서버로 보낸다', () => fixture(async (dir) => {
+  await writeFile(join(dir, '원본-비밀-파일명.png'), PNG);
+  await writeFile(join(dir, 'product.json'), JSON.stringify({ ...PRODUCT, images: ['원본-비밀-파일명.png'] }));
+  const h = harness({ respond: (request) => request.url.pathname.endsWith('/upload') ? { data: { originalUrl: 'https://storage.dev.clack.kr/new.png' } } : { data: { id: 21, created_at: '2026-09-19T10:00:00Z' } } });
+  await h.run(['product', 'create', '-f', join(dir, 'product.json')]);
+  const upload = h.calls.find(call => call.url.pathname.endsWith('/upload'));
+  assert.ok(upload); const file = (upload!.body as FormData).get('file') as any;
+  assert.ok(file); assert.notEqual(file.name, '원본-비밀-파일명.png'); assert.doesNotMatch(file.name, /원본|비밀/);
+  assert.match(file.name, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
+  assert.equal(file.type, 'image/png');
+}));
 test('거래완료·삭제 확인 실패는 쓰기를 호출하지 않는다', async () => {
   for (const args of [['product', 'status', '1', 'sold'], ['post', 'delete', '1'], ['channel', 'post', 'delete', '1'], ['me', 'address', 'delete', '1']]) { const h = harness(); await assert.rejects(h.run(args), /확인 필요/); assert.equal(h.calls.length, 0); assert.equal(h.confirmations, 1); }
   const h = harness(); await h.run(['product', 'status', '1', 'selling']); assert.equal(h.calls[0].body.order_status, null);

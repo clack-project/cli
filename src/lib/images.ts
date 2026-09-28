@@ -1,5 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 import { imageSize } from 'image-size';
 import { CliError } from '../core/errors.js';
 import type { CommandContext } from '../core/types.js';
@@ -7,6 +8,8 @@ import { isCdnImage } from '../schemas/channel.js';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MIME: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heif: 'image/heif', avif: 'image/avif', bmp: 'image/bmp', tiff: 'image/tiff', svg: 'image/svg+xml' };
+// 검증된 MIME(로컬 파일 내용 기준)에서 확장자를 역으로 찾는다. 로컬 원본 파일명은 서버로 보내지 않는다.
+const EXTENSION_BY_MIME: Record<string, string> = Object.fromEntries(Object.entries(MIME).map(([extension, mime]) => [mime, extension]));
 export type PreparedImage = { source: string; bytes?: Uint8Array; mime?: string; width?: number; height?: number };
 export function isRemoteImage(value: string): boolean {
   if (!/^https?:\/\//i.test(value)) return false;
@@ -42,7 +45,9 @@ export async function uploadPrepared(ctx: CommandContext, image: PreparedImage):
   if (!image.bytes) return { originalUrl: image.source };
   if (ctx.options.dryRun) return { originalUrl: image.source };
   const body = new FormData();
-  body.append('file', new Blob([new Uint8Array(image.bytes)], { type: image.mime }), basename(image.source));
+  const extension = image.mime ? EXTENSION_BY_MIME[image.mime] : undefined;
+  const filename = `${randomUUID()}${extension ? `.${extension}` : ''}`;
+  body.append('file', new Blob([new Uint8Array(image.bytes)], { type: image.mime }), filename);
   const result = await ctx.api.request<{ originalUrl: string; thumbnail400Url: string }>('POST', '/v4/images/upload', { body });
   if (!result.data?.originalUrl) throw new CliError('이미지 업로드 응답에 URL이 없습니다.', 'INVALID_RESPONSE', 502);
   return result.data;

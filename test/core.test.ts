@@ -127,6 +127,125 @@ test('config env 전환은 저장된 원점을 바꾸고 이전 환경 토큰의
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test('config set env dev 후 login하면 이후 --env dev 유무와 관계없이 같은 dev 자격을 쓴다(D6 i)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-d6-i-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    // clack config set env dev (프로필 미지정)
+    const forConfigSet = await store.resolve({}, true);
+    await store.setConfig(forConfigSet.profile, 'env', 'dev');
+    // clack login (플래그 없음) — config에 저장된 env로 dev에 연결된다
+    const forLogin = await store.resolve({}, true);
+    assert.equal(forLogin.baseUrl, 'https://v4-api.dev.clack.kr');
+    await store.saveCredential(forLogin.profile, { token, base_url: forLogin.baseUrl, scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z' });
+    await store.setConfig(forLogin.profile, 'base_url', forLogin.baseUrl);
+    // clack whoami --env dev
+    const withFlag = await store.resolve({ env: 'dev' });
+    assert.equal(withFlag.profile, forLogin.profile);
+    assert.equal(withFlag.baseUrl, 'https://v4-api.dev.clack.kr');
+    assert.equal(withFlag.token, token);
+    // clack whoami (플래그 없음)
+    const withoutFlag = await store.resolve({});
+    assert.equal(withoutFlag.profile, forLogin.profile);
+    assert.equal(withoutFlag.baseUrl, 'https://v4-api.dev.clack.kr');
+    assert.equal(withoutFlag.token, token);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('사전 config 없이 login --env dev만 해도 이후 명령이 --env dev 유무와 관계없이 같은 dev 자격을 쓴다(D6 ii)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-d6-ii-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    // clack login --env dev (config set env 없이 바로)
+    const forLogin = await store.resolve({ env: 'dev' }, true);
+    assert.equal(forLogin.baseUrl, 'https://v4-api.dev.clack.kr');
+    await store.saveCredential(forLogin.profile, { token, base_url: forLogin.baseUrl, scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z' });
+    await store.setConfig(forLogin.profile, 'base_url', forLogin.baseUrl);
+    // clack whoami (플래그 없음) — 운영 프로필로 조용히 넘어가지 않고 같은 dev 자격을 쓴다
+    const withoutFlag = await store.resolve({});
+    assert.equal(withoutFlag.profile, forLogin.profile);
+    assert.equal(withoutFlag.baseUrl, 'https://v4-api.dev.clack.kr');
+    assert.equal(withoutFlag.token, token);
+    // clack whoami --env dev
+    const withFlag = await store.resolve({ env: 'dev' });
+    assert.equal(withFlag.token, token);
+    // 명시적으로 다른 환경(prod)을 고르면 그 환경을 따르고, 그 환경의 자격이 없으면 재로그인을 요구한다(예외 조항)
+    await assert.rejects(store.resolve({ env: 'prod' }), { code: 'TOKEN_ORIGIN_MISMATCH' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('config set env dev와 login --env dev를 섞어 써도 같은 dev 자격을 쓴다(D6 iii)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-d6-iii-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    await store.setConfig((await store.resolve({}, true)).profile, 'env', 'dev');
+    // 이미 config로 dev를 골라 두고도 login에 --env dev를 중복으로 붙인다
+    const forLogin = await store.resolve({ env: 'dev' }, true);
+    await store.saveCredential(forLogin.profile, { token, base_url: forLogin.baseUrl, scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z' });
+    await store.setConfig(forLogin.profile, 'base_url', forLogin.baseUrl);
+    assert.equal((await store.resolve({})).token, token);
+    assert.equal((await store.resolve({ env: 'dev' })).token, token);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('명시적 --profile은 기본 프로필과 분리된 별도 자격을 유지한다(D6, 명시적 --profile)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-d6-profile-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    const forLogin = await store.resolve({ profile: 'work', env: 'dev' }, true);
+    assert.equal(forLogin.profile, 'work');
+    await store.saveCredential('work', { token, base_url: forLogin.baseUrl, scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z' });
+    await store.setConfig('work', 'base_url', forLogin.baseUrl);
+    // 기본(묵시적) 프로필은 별도이므로 아직 로그인하지 않은 상태다.
+    assert.equal((await store.resolve({})).token, undefined);
+    // 같은 --profile을 다시 지정하면 --env 없이도 동작한다.
+    const explicit = await store.resolve({ profile: 'work' });
+    assert.equal(explicit.token, token);
+    assert.equal(explicit.baseUrl, 'https://v4-api.dev.clack.kr');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('이전 개발 빌드가 기본 프로필 이름으로 저장한 prod 키도 그대로 이어서 쓴다(D6, 하위 호환)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-d6-legacy-test-'));
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    // 이전 빌드의 버그로 dev 자격이 기본 프로필 이름인 'prod'에 저장된 상태를 그대로 재현한다.
+    await store.saveCredential('prod', { token, base_url: 'https://v4-api.dev.clack.kr', scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z' });
+    await store.setConfig('prod', 'env', 'dev');
+    const resolved = await store.resolve({});
+    assert.equal(resolved.token, token);
+    assert.equal(resolved.baseUrl, 'https://v4-api.dev.clack.kr');
+    // logout 등 삭제 동작이 실제로 이 레거시 버킷을 비운다(다른 키에 쓰고 마는 일이 없어야 한다).
+    await store.removeCredential(resolved.profile);
+    assert.equal((await store.resolve({})).token, undefined);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('login 성공 사람용 출력은 JSON 모양이 아니라 문장형이고 --json은 기존 모양을 유지한다(D9)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'clack-d9-test-'));
+  // login --token 경로는 resolve()로 새로 만든 ApiClient(전역 fetch)로 토큰을 확인하므로 전역 fetch를 임시로 바꾼다.
+  const originalFetch = globalThis.fetch;
+  try {
+    const store = new ConfigStore({ CLACK_CONFIG_DIR: directory });
+    globalThis.fetch = mockFetch(url => {
+      if (url.pathname.endsWith('/api-tokens')) return response({ data: [{ id: 1, token_prefix: token.slice(0, 12), scopes: ['profile:read'], expires_at: '2026-10-19T00:00:00.000Z', revoked_at: null, suspended_at: null }] });
+      return response({ data: { id: 1, name: '합성', avatar: null } });
+    });
+    const fixture = commandFixture(new ApiClient({ baseUrl: 'https://v4-api.clack.kr', token }));
+    registerAuthCommands(fixture.program, fixture.runtime, store);
+    const written: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    (process.stdout as unknown as { write: typeof process.stdout.write }).write = ((chunk: unknown) => { written.push(String(chunk)); return true; }) as typeof process.stdout.write;
+    try { await fixture.program.parseAsync(['login', '--token', token], { from: 'user' }); }
+    finally { process.stdout.write = original; }
+    const humanOutput = written.join('');
+    assert.match(humanOutput, /연결되었습니다\./);
+    assert.doesNotMatch(humanOutput.trim(), /^\{/);
+    assert.match(humanOutput, /만료: /);
+    assert.equal(fixture.outputs.length, 0);
+  } finally { globalThis.fetch = originalFetch; await rm(directory, { recursive: true, force: true }); }
+});
+
 test('logout은 401의 서버 폐기를 확정하지 않고 503·네트워크 실패에는 로컬 토큰을 보존한다', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'clack-logout-test-'));
   try {

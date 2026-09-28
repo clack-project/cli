@@ -8,6 +8,7 @@ import { ApiClient, VERSION } from '../core/api.js';
 import { ConfigStore, validateToken, type Credential } from '../core/config.js';
 import { CliError } from '../core/errors.js';
 import { redactText, rememberSecret } from '../core/secrets.js';
+import { formatInstant } from '../core/time.js';
 import type { Runtime } from '../core/types.js';
 
 export const SCOPES = ['profile:read', 'profile:write', 'product:read', 'product:write', 'content:read', 'content:write', 'creator-content:read', 'creator-content:write', 'creator-content:publish', 'skill:read', 'skill:write', 'skill:publish', 'platform:read', 'platform:write', 'custom-page:read', 'custom-page:write', 'custom-page:publish'];
@@ -79,7 +80,8 @@ export function registerAuthCommands(program: Command, runtime: Runtime, store: 
   runtime.action(program.command('login').description('앱에서 승인하거나 개인 액세스 토큰으로 연결')
     .option('--token [pat]', '토큰 입력. 값을 생략하면 숨김 프롬프트 또는 표준 입력 사용')
     .option('--scopes <scopes>', '요청 권한 (쉼표 구분)', 'profile:read')
-    .option('--no-browser', '브라우저 자동 열기 생략').option('--label <name>', '기기 이름', hostname()), async (ctx, _args, opts) => {
+    .option('--no-browser', '브라우저 자동 열기 생략').option('--no-qr', 'QR 코드 출력 생략 (에이전트·비대화형 환경에 적합)')
+    .option('--label <name>', '기기 이름', hostname()), async (ctx, _args, opts) => {
     if (ctx.options.dryRun) throw new CliError('login은 --dry-run을 지원하지 않습니다.');
     const resolved = await store.resolve(ctx.options, true);
     let credential: Credential;
@@ -107,7 +109,7 @@ export function registerAuthCommands(program: Command, runtime: Runtime, store: 
       if (verification.protocol !== 'https:' || !['clack.kr', 'dev.clack.kr', 'www.clack.kr'].includes(verification.hostname)
         || verification.username || verification.password || verification.port) throw new CliError('승인 페이지 주소가 올바르지 않습니다.', 'INVALID_RESPONSE', 0);
       process.stderr.write(redactText(`앱 마이페이지 → 계정 → 내 정보 수정하기 → 외부 도구 연결 → 코드로 승인에서 ${request.user_code} 입력\n${verification.href}\n`));
-      if (process.stderr.isTTY && !ctx.options.json) qr.generate(verification.href, { small: true }, value => process.stderr.write(value + '\n'));
+      if (opts.qr !== false && process.stderr.isTTY && !ctx.options.json) qr.generate(verification.href, { small: true }, value => process.stderr.write(value + '\n'));
       if (opts.browser && process.stdin.isTTY && !ctx.options.json) await open(verification.href).catch(() => process.stderr.write('브라우저를 열지 못했습니다. 위 주소나 앱에서 승인하세요.\n'));
       const grant = await pollDevice(ctx.api, request);
       const token = validateToken(grant.token);
@@ -117,7 +119,18 @@ export function registerAuthCommands(program: Command, runtime: Runtime, store: 
     }
     await store.saveCredential(resolved.profile, credential);
     await store.setConfig(resolved.profile, 'base_url', resolved.baseUrl);
-    ctx.output({ profile: resolved.profile, user: credential.user ?? null, scopes: credential.scopes, expires_at: credential.expires_at, message: '연결되었습니다.' });
+    if (ctx.options.json) {
+      ctx.output({ profile: resolved.profile, user: credential.user ?? null, scopes: credential.scopes, expires_at: credential.expires_at, message: '연결되었습니다.' });
+    } else {
+      // 사람용 출력은 JSON을 그대로 찍지 않고 다른 명령과 같은 --time 규칙으로 만료 시각을 표시한다.
+      const expiry = formatInstant(credential.expires_at, 'utc-v1', ctx.options.time ?? 'local');
+      process.stdout.write(redactText([
+        `연결되었습니다. (프로필: ${resolved.profile}, 주소: ${resolved.baseUrl})`,
+        credential.user ? `사용자: ${credential.user.name ?? '이름 없음'} (#${credential.user.id})` : '사용자: profile:read 권한이 없어 조회하지 않음',
+        `권한: ${credential.scopes.join(', ')}`,
+        `만료: ${expiry}`,
+      ].join('\n') + '\n'));
+    }
   });
   runtime.action(program.command('logout').description('현재 토큰을 서버에서 폐기하고 로컬 연결 삭제'), async (ctx) => {
     const resolved = await store.resolve(ctx.options);

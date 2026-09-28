@@ -7,6 +7,12 @@ import { rememberSecret } from './secrets.js';
 import type { GlobalOptions } from './types.js';
 
 export const BASE_URLS = { prod: 'https://v4-api.clack.kr', dev: 'https://v4-api.dev.clack.kr' };
+// 프로필을 명시하지 않았을 때 쓰는 기본 프로필 이름. env 값('prod'/'dev')과 겹치지 않는 중립적인 이름을 써서
+// "profile":"prod"가 dev 원점과 함께 표시되는 혼란(D6)을 막는다.
+const DEFAULT_PROFILE = 'default';
+// 이전 개발 빌드는 기본 프로필 이름을 'prod'로 저장했다. 프로필을 명시하지 않았고 새 기본 프로필에
+// 아무 것도 없을 때만 읽기 호환으로 이어서 쓴다(다음 로그인 시 자연스럽게 'default'로 옮겨간다).
+const LEGACY_DEFAULT_PROFILE = 'prod';
 export interface ProfileConfig {
   env?: 'prod' | 'dev'; base_url?: string; time?: 'local' | 'utc'; lang?: 'ko' | 'en'; output?: 'json' | 'human';
 }
@@ -78,11 +84,22 @@ export class ConfigStore {
   }
   async resolve(options: GlobalOptions = {}, ignoreCredential = false): Promise<ResolvedConfig> {
     if (options.env && !['prod', 'dev'].includes(options.env)) throw new CliError('--env는 prod 또는 dev여야 합니다.');
-    const profile = validateProfile(options.profile ?? this.env.CLACK_PROFILE ?? options.env ?? 'prod');
-    const config = (await this.read<ProfileConfig>('config.json')).profiles[profile] ?? {};
+    // 프로필은 --env와 무관하게 정해진다: --env/config set env는 프로필이 아니라 그 프로필이 가리키는
+    // 환경(주소)만 고른다. 그래야 config set env dev로 로그인한 뒤 --env dev를 붙이거나 떼도,
+    // 또는 login --env dev로 바로 연결해도 항상 같은 프로필의 같은 자격을 쓴다(D6).
+    const explicitProfile = options.profile ?? this.env.CLACK_PROFILE;
+    let profile = validateProfile(explicitProfile ?? DEFAULT_PROFILE);
+    const configFile = await this.read<ProfileConfig>('config.json');
+    const credentialFile = ignoreCredential ? undefined : await this.read<Credential>('credentials.json');
+    if (!explicitProfile && profile === DEFAULT_PROFILE && !configFile.profiles[DEFAULT_PROFILE]
+      && !(credentialFile && credentialFile.profiles[DEFAULT_PROFILE])
+      && (configFile.profiles[LEGACY_DEFAULT_PROFILE] || (credentialFile && credentialFile.profiles[LEGACY_DEFAULT_PROFILE]))) {
+      profile = LEGACY_DEFAULT_PROFILE;
+    }
+    const config = configFile.profiles[profile] ?? {};
     const environment = options.env ?? config.env ?? (profile === 'dev' ? 'dev' : 'prod');
     const baseUrl = validateBaseUrl(options.baseUrl ?? this.env.CLACK_API_BASE ?? (options.env ? BASE_URLS[options.env] : config.base_url) ?? BASE_URLS[environment]);
-    const credential = ignoreCredential ? undefined : (await this.read<Credential>('credentials.json')).profiles[profile];
+    const credential = ignoreCredential ? undefined : credentialFile!.profiles[profile];
     const envToken = this.env.CLACK_TOKEN;
     if (!ignoreCredential && !envToken && credential && credential.base_url !== baseUrl) throw new CliError('저장된 토큰의 API 주소와 다릅니다. 대상 주소에서 clack login을 다시 실행하세요.', 'TOKEN_ORIGIN_MISMATCH', 401);
     const token = ignoreCredential ? undefined : envToken ? validateToken(envToken) : credential ? validateToken(credential.token) : undefined;
