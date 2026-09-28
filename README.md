@@ -222,7 +222,7 @@ clack skill deprecate <스킬-UUID> --env dev
 
 ### 스킬 플러그인 정적 검사(plugin-static-v2)
 
-`clack.skill.json`의 `authoring.plugin`으로 제작 화면 플러그인을 선언하면 서버가 번들을 구문 트리(JS·HTML·CSS)로 검사합니다. 위험 기능을 쓰지 않는다고 증명할 수 있는 코드만 통과하고, 판단할 수 없는 코드는 오류로 봅니다. 요약은 다음과 같고 크리에이터 센터 `/creator/skills/help/plugin`에도 같은 안내가 있습니다. 메시지 예제·권한 동의·심사 준비를 포함한 상세 안내의 정본은 크리에이터 가이드 `/guide/reference/templates/editor-plugins`(T09)와 실습 과정 `/guide/courses/center-editor-plugin`(T05)입니다.
+`clack.skill.json`의 `authoring.plugin`으로 제작 화면 플러그인을 선언하면 서버가 번들을 구문 트리(JS·HTML·CSS)로 검사합니다. 위험 기능을 쓰지 않는다고 증명할 수 있는 코드만 통과하고, 판단할 수 없는 코드는 오류로 봅니다. 요약은 다음과 같고 크리에이터 센터 `/ko/creator/skills/help/plugin`에도 같은 안내가 있습니다. 메시지 예제·권한 동의·심사 준비를 포함한 상세 안내의 정본은 크리에이터 가이드 `/ko/guide/reference/templates/editor-plugins`(T09)와 실습 과정 `/ko/guide/courses/center-editor-plugin`(T05)입니다.
 
 - 선언: `bundle`(진입 HTML)·`sha256`·`fields`·`permissions`·`purpose`. 권한은 `getFormSchema`·`getFormValues`·`setFormValues`·`listApprovedAssets`·`requestAssetUpload`만 있고, 권한·필드가 늘면 크리에이터에게 다시 동의를 받습니다.
 - 번들: 파일 50개, 파일당 512 KiB, 전체 2 MiB, 코드 합계 512 KiB 이하. 형식은 html·js·mjs·css·json·png·jpg·webp·gif·woff·woff2만 허용합니다.
@@ -334,3 +334,7 @@ clack page status PAGE_ID
 - AI 채우기는 `fill-quote` → `fill` → `fill-status`, 자산 목록은 `assets`, 이미지 작업 조회는 `tool`, 폼 검증은 `validate`를 사용한다.
 
 `image_list` 값은 `[{"asset_id":"UUID","scene":"장면","pose":"구도","mood":"분위기","aspect":"1:1"}]`이며 한 번에 최대 8장, 콘텐츠당 최대 24장을 사용한다. 스킬의 `max_calls`와 플랫폼 설정 중 작은 한도를 적용한다. 참조 이미지 생성은 공급자 검증 전 비활성이며 현재 외모·화풍·팔레트 텍스트로 동일성을 안내한다.
+
+크리에이터 센터·가이드는 `/ko`·`/en` 주소를 사용하며 로그인 상태에서는 앱 언어 설정을 따릅니다. 콘텐츠는 SDK 1.2.0의 `clack.locale` 또는 `window.__clack_env?.locale`에서 앱 언어(`language`)·기기 지역(`region`)·BCP 47 태그(`tag`)를 동기적으로 읽습니다. 번역은 `language`로 고르고 숫자·날짜는 `tag`를 `Intl`에 전달합니다. 기존 `me().locale`은 `ko|en`이고 `me().locale_tag`가 전체 태그입니다.
+
+새 다국어 계약은 개발 센터와 최신 staging 테스터 앱에서 제공하며, 운영에서는 센터 초기 출시와 함께 별도로 활성화합니다. 상세 계약과 예제는 개발 센터의 가이드 P11(`/ko/guide/reference/platform/multilingual-content`)을 확인하세요. 앱 언어 환경값이 없는 구버전 앱에서는 `clack.locale.source`가 `browser`이며 브라우저 언어로 대체됩니다.
