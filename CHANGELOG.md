@@ -7,6 +7,7 @@
 - `skill deprecate`·`skill release`에서 토큰이 없을 때 필요한 권한을 `skill:write`로 잘못 안내하던 문제를 고쳤다. 두 명령 모두 `skill:publish`가 필요하다. README의 스킬 권한 안내도 같이 고쳤다.
 - `content`·`page`·`skill`의 하위 명령 도움말(`--help`)에 필요한 권한을 표시한다. 심사 제출(`content submit`·`page submit`·`skill submit`)에는 쓰기와 게시(publish) 권한이 둘 다 필요하다는 점을 명시했다. README에 콘텐츠·스킬 명령별 권한 표를 추가했고, `login --scopes` 도움말에 묶음 이름은 읽기·쓰기만 요청하므로 `*:publish`를 따로 적어야 한다고 안내한다.
 - 로컬 플랫폼 MCP 도구 설명과 `mcp config --platform` 안내에 빠져 있던 권한(`skill:read`, 제작 도구의 `creator-content:write`)을 추가했다.
+- `clack skills` 안내의 최소 CLI 버전을 0.1.1로 올렸다. 출력에 공개 에이전트 스킬 10종 목록과 스킬별 요구 CLI 버전(`skills`), 여러 스킬 선택 설치 예시를 추가했다. README의 스킬 안내도 10종으로 고쳤다.
 
 ## 0.1.0
 

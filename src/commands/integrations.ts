@@ -7,6 +7,26 @@ import { servePlatformMcp } from '../lib/platform-mcp.js';
 
 export const SKILLS_REPOSITORY = 'https://github.com/clack-project/skills';
 
+/**
+ * 공개 스킬 저장소의 스킬 목록과 각 SKILL.md가 요구하는 최소 CLI 버전. 스킬 저장소를 갱신하면 함께 맞춘다.
+ * clack-mcp는 CLI 없이도 쓸 수 있고, 설정 출력에 CLI를 쓸 때만 최소 버전이 적용된다.
+ */
+export const AGENT_SKILLS = [
+  { name: 'clack-setup', audience: 'general', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-products', audience: 'general', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-content', audience: 'general', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-channel', audience: 'general', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-profile', audience: 'general', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-mcp', audience: 'general', minimum_cli_version: '0.1.0', cli_required: false },
+  { name: 'clack-creator-content', audience: 'creator', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-page', audience: 'creator', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-skill-package', audience: 'creator', minimum_cli_version: '0.1.1', cli_required: true },
+  { name: 'clack-platform-data', audience: 'creator', minimum_cli_version: '0.1.1', cli_required: true },
+] as const;
+
+/** CLI가 필요한 스킬 전체를 쓰기 위한 최소 CLI 버전(각 스킬 요구 버전의 최댓값). */
+export const SKILLS_MINIMUM_CLI_VERSION = '0.1.1';
+
 /** POSIX 셸에서 환경변수 참조를 확장하지 않는 단일 인자로 만든다. */
 function quoteArgument(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -57,10 +77,12 @@ export function registerIntegrationCommands(program: Command, runtime: Runtime):
   runtime.action(mcp.command('serve-platform').description('플랫폼 서버 키 조회 도구를 MCP stdio로 제공'),
     async (ctx) => servePlatformMcp(ctx.api.settings));
   runtime.action(program.command('skills').description('에이전트 스킬 설치 방법 안내'), async ctx => {
-    ctx.output({ repository: SKILLS_REPOSITORY, minimum_cli_version: '0.1.0', cli_version: VERSION,
+    ctx.output({ repository: SKILLS_REPOSITORY, minimum_cli_version: SKILLS_MINIMUM_CLI_VERSION, cli_version: VERSION,
+      skill_count: AGENT_SKILLS.length, skills: AGENT_SKILLS,
       install: 'npx skills add clack-project/skills',
       install_global: 'npx skills add clack-project/skills -g',
       install_selected: 'npx skills add clack-project/skills -s clack-products',
+      install_selected_multiple: 'npx skills add clack-project/skills --skill clack-setup clack-creator-content clack-page',
       update: 'npx skills update', remove: 'npx skills remove',
       message: `공개 저장소 ${SKILLS_REPOSITORY}에서 npx skills로 설치합니다. 이 명령은 안내만 출력하며 설치나 로그인을 실행하지 않습니다.`,
     });
