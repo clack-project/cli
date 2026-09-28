@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clack.kr/schemas/platform/clack-content.v1.schema.json",
+  "$comment": "모노레포 clack-api-v4/contracts/platform/schemas/clack-content.v1.schema.json에서 복사한 파일이다. 이 파일을 직접 수정하지 말고 scripts/sync-vendor-types.mjs로 갱신한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "manifest_version": {
+      "const": 1
+    },
+    "sdk": {
+      "type": "string",
+      "pattern": "^1(?:\\.[0-9]+(?:\\.[0-9]+)?)?$"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "identity.basic",
+          "events.track",
+          "data.viewer",
+          "data.shared",
+          "data.creator",
+          "identity.profile",
+          "ai.conversation",
+          "ai.completion",
+          "cash.purchase",
+          "ai.image"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+      },
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "collections": {
+      "$ref": "#/$defs/collections"
+    },
+    "items": {
+      "$ref": "#/$defs/items"
+    },
+    "config": {
+      "type": "object"
+    },
+    "built_with": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "skill": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$"
+        }
+      },
+      "required": [
+        "skill",
+        "version"
+      ]
+    }
+  },
+  "required": [
+    "manifest_version",
+    "sdk",
+    "capabilities",
+    "profiles",
+    "collections",
+    "items",
+    "config"
+  ],
+  "$defs": {
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "viewer",
+            "shared",
+            "creator"
+          ]
+        },
+        "write": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "creator"
+          ]
+        },
+        "viewer_read": {
+          "type": "boolean"
+        },
+        "max_doc_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        },
+        "max_docs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "per_viewer_max_docs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "sort_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+          },
+          "maxItems": 1,
+          "uniqueItems": true
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "shared"
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "properties": {
+              "viewer_read": false
+            }
+          },
+          "else": {
+            "properties": {
+              "write": false,
+              "per_viewer_max_docs": false,
+              "sort_fields": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "creator"
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "else": {
+            "properties": {
+              "viewer_read": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "shared"
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "else": {
+            "properties": {
+              "max_docs": {
+                "maximum": 1000
+              }
+            }
+          }
+        }
+      ]
+    },
+    "collections": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/collection"
+      },
+      "maxProperties": 16
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "consumable",
+            "permanent"
+          ]
+        },
+        "price_cash": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      },
+      "required": [
+        "title",
+        "type",
+        "price_cash"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "consumable"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "quantity"
+            ]
+          },
+          "else": {
+            "properties": {
+              "quantity": false
+            }
+          }
+        }
+      ]
+    },
+    "items": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  }
+}

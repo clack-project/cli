@@ -1,0 +1,593 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clack.kr/schemas/platform/authoring-form.v1.schema.json",
+  "$comment": "모노레포 clack-api-v4/contracts/platform/schemas/authoring-form.v1.schema.json에서 복사한 파일이다. 이 파일을 직접 수정하지 말고 scripts/sync-vendor-types.mjs로 갱신한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "object",
+        "string",
+        "integer",
+        "number",
+        "boolean",
+        "array"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "default": {},
+    "enum": {
+      "type": "array",
+      "items": {},
+      "minItems": 1
+    },
+    "minLength": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxLength": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "minimum": {
+      "type": "number"
+    },
+    "maximum": {
+      "type": "number"
+    },
+    "minItems": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxItems": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "uniqueItems": {
+      "type": "boolean"
+    },
+    "pattern": {
+      "type": "string",
+      "maxLength": 256
+    },
+    "format": {
+      "const": "uuid"
+    },
+    "$ref": {
+      "type": "string",
+      "pattern": "^#/$defs/[A-Za-z][A-Za-z0-9_-]*$"
+    },
+    "additionalProperties": {
+      "const": false
+    },
+    "properties": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rootField"
+      },
+      "maxProperties": 60
+    },
+    "required": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+      },
+      "uniqueItems": true
+    },
+    "items": {
+      "$ref": "#/$defs/node"
+    },
+    "x-clack-widget": {
+      "type": "string",
+      "enum": [
+        "text",
+        "textarea",
+        "select",
+        "radio",
+        "chips",
+        "toggle",
+        "number",
+        "image",
+        "list",
+        "rating",
+        "tier",
+        "image_list",
+        "content_ref"
+      ]
+    },
+    "x-clack-visibility": {
+      "type": "string",
+      "enum": [
+        "public",
+        "private"
+      ]
+    },
+    "x-clack-section": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+    },
+    "x-clack-ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "suggest",
+            "never"
+          ]
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "fill"
+      ]
+    },
+    "x-clack-asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accept": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304
+        },
+        "aspect": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"
+        },
+        "generate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "accept",
+        "max_bytes"
+      ]
+    },
+    "x-clack-placeholder": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "x-clack-help": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "x-clack-i18n": {
+      "type": "object",
+      "properties": {
+        "ko": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "en": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "ko"
+      ],
+      "additionalProperties": false
+    },
+    "x-clack-sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
+      "maxItems": 20
+    },
+    "$defs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "x-clack-source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "const": "character"
+        },
+        "import": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "minProperties": 1,
+          "maxProperties": 60
+        }
+      },
+      "required": [
+        "entity",
+        "import"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties",
+    "additionalProperties"
+  ],
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "object",
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "array"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "default": {},
+        "enum": {
+          "type": "array",
+          "items": {},
+          "minItems": 1
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "uniqueItems": {
+          "type": "boolean"
+        },
+        "pattern": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "format": {
+          "const": "uuid"
+        },
+        "$ref": {
+          "type": "string",
+          "pattern": "^#/$defs/[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "additionalProperties": {
+          "const": false
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "uniqueItems": true
+        },
+        "items": {
+          "$ref": "#/$defs/node"
+        },
+        "x-clack-widget": {
+          "type": "string",
+          "enum": [
+            "text",
+            "textarea",
+            "select",
+            "radio",
+            "chips",
+            "toggle",
+            "number",
+            "image",
+            "list",
+            "rating",
+            "tier",
+            "image_list",
+            "content_ref"
+          ]
+        },
+        "x-clack-visibility": {
+          "type": "string",
+          "enum": [
+            "public",
+            "private"
+          ]
+        },
+        "x-clack-section": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "x-clack-ai": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fill": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "suggest",
+                "never"
+              ]
+            },
+            "hint": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "context": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "fill"
+          ]
+        },
+        "x-clack-asset": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accept": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/webp"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4194304
+            },
+            "aspect": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"
+            },
+            "generate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "accept",
+            "max_bytes"
+          ]
+        },
+        "x-clack-placeholder": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "x-clack-help": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "x-clack-i18n": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
+        },
+        "x-clack-source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entity": {
+              "const": "character"
+            },
+            "import": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "minProperties": 1,
+              "maxProperties": 60
+            }
+          },
+          "required": [
+            "entity",
+            "import"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "object"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "properties",
+              "additionalProperties"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "string"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "maxLength"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "array"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "items"
+            ]
+          }
+        }
+      ]
+    },
+    "rootField": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/node"
+        },
+        {
+          "required": [
+            "x-clack-visibility",
+            "x-clack-widget"
+          ]
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "type": {
+          "const": "object"
+        },
+        "additionalProperties": {
+          "const": false
+        }
+      }
+    }
+  ]
+}

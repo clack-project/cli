@@ -1,0 +1,762 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clack.kr/schemas/platform/clack.skill.v1.schema.json",
+  "$comment": "모노레포 clack-api-v4/contracts/platform/schemas/clack-skill.v1.schema.json에서 복사한 파일이다. 이 파일을 직접 수정하지 말고 scripts/sync-vendor-types.mjs로 갱신한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "manifest_version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "instruction",
+        "template",
+        "tool"
+      ]
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
+        },
+        "icon": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+        },
+        "screenshots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+          },
+          "maxItems": 10
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "character_chat",
+            "quiz",
+            "worldbuilding",
+            "gallery",
+            "story",
+            "agent_tool"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "maxItems": 10,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "title",
+        "summary",
+        "category"
+      ]
+    },
+    "authoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "template",
+              "agent"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "center",
+              "app",
+              "cli"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "form": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+        },
+        "ai_fill": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tiers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "economy",
+                  "performance"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "default_tier": {
+              "type": "string",
+              "enum": [
+                "economy",
+                "performance"
+              ]
+            }
+          },
+          "required": [
+            "enabled"
+          ]
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+          },
+          "uniqueItems": true
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "const": "image.generate"
+              },
+              "max_calls": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "purpose": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "aspect": {
+                "type": "string",
+                "pattern": "^(?:slot|[1-9][0-9]*:[1-9][0-9]*)$"
+              },
+              "batch_max": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "references": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "allow": {
+                    "type": "boolean"
+                  },
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "session",
+                        "content_ref"
+                      ]
+                    },
+                    "uniqueItems": true,
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "allow",
+                  "sources"
+                ]
+              }
+            },
+            "required": [
+              "tool",
+              "max_calls",
+              "purpose"
+            ]
+          },
+          "maxItems": 8
+        },
+        "plugin": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bundle": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "permissions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "getFormSchema",
+                  "getFormValues",
+                  "setFormValues",
+                  "listApprovedAssets",
+                  "requestAssetUpload"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "bundle",
+            "sha256",
+            "fields",
+            "permissions",
+            "purpose"
+          ]
+        }
+      },
+      "required": [
+        "modes",
+        "surfaces"
+      ]
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content_kind": {
+          "type": "string",
+          "enum": [
+            "html",
+            "gallery",
+            "slideshow"
+          ]
+        },
+        "discovery_category": {
+          "type": "string",
+          "enum": [
+            "character_chat",
+            "quiz",
+            "worldbuilding",
+            "gallery",
+            "story",
+            "agent_tool"
+          ]
+        },
+        "template": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+            },
+            "entry": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+            }
+          },
+          "required": [
+            "root",
+            "entry"
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "description": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "thumbnail": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}(?:\\[(?:0|[1-9][0-9]*)\\])?$"
+            },
+            "thumbnail_fallback": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}(?:\\[(?:0|[1-9][0-9]*)\\])?$"
+            }
+          },
+          "required": [
+            "title"
+          ]
+        },
+        "asset_slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+              },
+              "types": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/webp"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "max_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4194304
+              },
+              "multiple": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "min": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 24
+                  },
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 24
+                  },
+                  "path": {
+                    "type": "string",
+                    "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+\\{n\\}[A-Za-z0-9_./-]*$"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max",
+                  "path"
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "types",
+              "max_bytes"
+            ],
+            "oneOf": [
+              {
+                "required": [
+                  "path"
+                ],
+                "not": {
+                  "required": [
+                    "multiple"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "multiple"
+                ],
+                "not": {
+                  "required": [
+                    "path"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "derive": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "join": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "item": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "separator": {
+                "type": "string",
+                "maxLength": 100
+              }
+            },
+            "required": [
+              "target",
+              "join",
+              "item",
+              "separator"
+            ]
+          }
+        },
+        "profile_select": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "map": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                },
+                "uniqueItems": true
+              }
+            }
+          },
+          "required": [
+            "field",
+            "map"
+          ]
+        },
+        "entity": {
+          "const": "character"
+        },
+        "entity_map": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "summary": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "portrait": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}(?:\\[(?:0|[1-9][0-9]*)\\])?$"
+            },
+            "exports": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "uniqueItems": true,
+              "maxItems": 60
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "header_mode": {
+              "enum": [
+                "fixed",
+                "scroll_hide",
+                "translucent_scroll_hide",
+                "floating_close"
+              ]
+            },
+            "color_scheme": {
+              "enum": [
+                "light",
+                "dark"
+              ]
+            }
+          },
+          "required": [
+            "schema_version",
+            "header_mode",
+            "color_scheme"
+          ]
+        }
+      },
+      "required": [
+        "content_kind"
+      ],
+      "dependentRequired": {
+        "entity": [
+          "entity_map"
+        ],
+        "entity_map": [
+          "entity"
+        ]
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sdk_version": {
+          "const": 1
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "identity.basic",
+              "events.track",
+              "data.viewer",
+              "data.shared",
+              "data.creator",
+              "identity.profile",
+              "ai.conversation",
+              "ai.completion",
+              "cash.purchase",
+              "ai.image"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "optional_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "identity.basic",
+              "events.track",
+              "data.viewer",
+              "data.shared",
+              "data.creator",
+              "identity.profile",
+              "ai.conversation",
+              "ai.completion",
+              "cash.purchase",
+              "ai.image"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "collections": {
+          "$ref": "clack-content.v1.schema.json#/$defs/collections"
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+          },
+          "uniqueItems": true
+        },
+        "items": {
+          "$ref": "clack-content.v1.schema.json#/$defs/items"
+        },
+        "rating_max": {
+          "type": "string",
+          "enum": [
+            "all",
+            "12",
+            "15"
+          ]
+        },
+        "game": {
+          "type": "string",
+          "enum": [
+            "not_game",
+            "game"
+          ]
+        }
+      },
+      "required": [
+        "sdk_version",
+        "capabilities",
+        "collections",
+        "profiles",
+        "rating_max",
+        "game"
+      ]
+    },
+    "evals": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "platform_api": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "manifest_version",
+    "name",
+    "version",
+    "type",
+    "display",
+    "authoring",
+    "output"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "template"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "runtime"
+        ],
+        "properties": {
+          "authoring": {
+            "required": [
+              "form"
+            ],
+            "properties": {
+              "modes": {
+                "contains": {
+                  "const": "template"
+                }
+              }
+            }
+          },
+          "output": {
+            "required": [
+              "discovery_category",
+              "template",
+              "metadata"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authoring": {
+            "required": [
+              "form",
+              "tools"
+            ]
+          },
+          "output": {
+            "required": [
+              "discovery_category",
+              "template",
+              "metadata"
+            ]
+          }
+        },
+        "required": [
+          "runtime"
+        ]
+      }
+    }
+  ]
+}

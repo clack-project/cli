@@ -1,0 +1,43 @@
+export class CliError extends Error {
+  constructor(message: string, public code = 'VALIDATION_ERROR', public status = 400, public retryAfter?: number) {
+    super(message);
+    this.name = 'CliError';
+  }
+  get exitCode(): number {
+    if (this.code === 'USER_API_UNAVAILABLE') return 8;
+    if (this.status === 401) return 3;
+    if (this.status === 403 || this.status === 423) return 4;
+    if (this.status === 404) return 5;
+    if ([400, 409, 410, 422].includes(this.status)) return 6;
+    if (this.status === 429) return 7;
+    if (this.status === 503 && this.code.endsWith('DISABLED')) return 8;
+    return 1;
+  }
+}
+
+export function apiError(status: number, body: unknown, retryAfter: string | null): CliError {
+  const value = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const code = typeof value.code === 'string' ? value.code : `HTTP_${status}`;
+  let message = typeof value.message === 'string' ? value.message : `요청에 실패했습니다 (${status}).`;
+  if (status === 401 && code === 'SERVER_KEY_INVALID') message += ' 센터에서 서버 키 상태를 확인하거나 새로 발급·회전하세요.';
+  else if (status === 401) message += ' clack login으로 다시 연결하세요.';
+  if (code === 'IDENTITY_VERIFICATION_REQUIRED') message += ' 앱에서 본인인증을 완료하세요.';
+  if (code === 'SCOPE_DENIED') message += ' 필요한 권한으로 토큰을 다시 발급하세요.';
+  if (code === 'SKILL_VERSION_MAJOR_REQUIRED') {
+    message += ' clack.skill.json·SKILL.md의 version을 올려 다시 push하세요. 같은 버전을 호환되게 고쳐 올리려면 먼저 clack skill cancel로 이 버전을 지우세요.';
+  }
+  if (status === 423 || code === 'USER_BANNED') message += ' 계정 제한 상태를 앱에서 확인하세요.';
+  if (status === 503 && code.endsWith('DISABLED')) message += ' 현재 외부 도구 접근이 일시 중단되었습니다.';
+  const raw = Number(value.retry_after ?? retryAfter);
+  const retry = Number.isFinite(raw) && raw > 0 ? Math.ceil(raw) : undefined;
+  return new CliError(message, code, status, retry);
+}
+
+export function asCliError(error: unknown): CliError {
+  if (error instanceof CliError) return error;
+  if (error instanceof Error && error.name === 'ZodError') {
+    const issues = (error as unknown as { issues: { path: unknown[]; message: string }[] }).issues;
+    return new CliError(issues.map(i => `${i.path.join('.') || '입력'}: ${i.message}`).join('; '));
+  }
+  return new CliError(error instanceof Error ? error.message : '요청을 처리하지 못했습니다.', 'INTERNAL_ERROR', 0);
+}

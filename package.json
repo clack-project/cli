@@ -1,0 +1,65 @@
+{
+  "name": "@clack-platform/cli",
+  "version": "0.1.0",
+  "description": "클랙 계정의 상품·콘텐츠·프로필을 관리하는 CLI",
+  "type": "module",
+  "bin": {
+    "clack": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "author": "CLACK Inc.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clack-project/cli.git"
+  },
+  "homepage": "https://github.com/clack-project/cli#readme",
+  "bugs": {
+    "url": "https://github.com/clack-project/cli/issues"
+  },
+  "keywords": [
+    "clack",
+    "clack-platform",
+    "cli",
+    "creator",
+    "marketplace"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "build": "tsup src/cli.ts --format esm --target node20 --clean",
+    "check": "pnpm typecheck && node scripts/check-schema-sync.mjs && pnpm test && pnpm build",
+    "check:release": "pnpm typecheck && node scripts/check-schema-sync.mjs --strict && pnpm test && pnpm build",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.10.1",
+    "ajv": "^8.17.1",
+    "commander": "^13.1.0",
+    "fflate": "0.8.3",
+    "image-size": "^2.0.2",
+    "open": "^10.2.0",
+    "qrcode-terminal": "^0.12.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@9.15.2"
+}
