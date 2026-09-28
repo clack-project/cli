@@ -247,7 +247,9 @@ test('skill deprecate는 PAT를 요구하고 확인 후 상태를 반환하며 d
     registerSkillCommands(program, commandRuntime(ctx));
     await program.parseAsync(['skill', 'deprecate', skillId], { from: 'user' });
   }
-  await assert.rejects(run(context(false, 'not-a-pat')), /개인 액세스 토큰/);
+  // 서버는 지원 종료에 skill:publish를 요구한다. skill:write로 안내하면 권한을 잘못 받아 403이 난다.
+  await assert.rejects(run(context(false, 'not-a-pat')), (error: Error) =>
+    /skill:publish/.test(error.message) && !/skill:write/.test(error.message));
   assert.equal(calls.length, 0);
   await run(context(true));
   assert.equal(confirmations.length, 0);

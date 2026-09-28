@@ -65,7 +65,7 @@ export async function authoringRequest(client: ApiClient, raw: unknown, surface:
 }
 
 export function registerAuthoringCommands(program: Command, runtime: Runtime) {
-  runtime.action(program.command('authoring').description('공개 스킬로 제작·자산 업로드·이미지 생성·패키징')
+  runtime.action(program.command('authoring').description('공개 스킬로 제작·자산 업로드·이미지 생성·패키징 (creator-content:write)')
     .requiredOption('--input <file>', 'action과 요청 값이 있는 JSON 파일'), async (ctx, _args, opts) => {
     const input = await readPlatformBodyFile(opts.input);
     if (ctx.options.dryRun) {

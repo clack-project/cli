@@ -19,7 +19,7 @@ clack whoami --json
 clack logout
 ```
 
-`login`이 표시한 코드를 앱 **마이페이지 → 계정 → 내 정보 수정하기 → 외부 도구 연결 → 코드로 승인**에서 입력한다. 요청한 권한을 확인하고 승인하면 CLI에 연결된다. 기본 요청 권한은 `profile:read` 하나다. `profile`, `product`, `content`, `creator-content`, `skill`, `platform` 묶음은 각각 읽기·쓰기를 모두 요청한다(`creator-content:publish`, `skill:publish`는 별도 명시가 필요하다). `platform`은 내 콘텐츠의 서버 키·공유 문서 관리 전용 권한이다(아래 "플랫폼 전용 PAT 도구" 절 참고). 소셜 로그인 사용자도 앱에서 승인할 수 있다. 웹 승인 화면은 별도 후속 단계이므로 현재는 앱 승인을 사용한다.
+`login`이 표시한 코드를 앱 **마이페이지 → 계정 → 내 정보 수정하기 → 외부 도구 연결 → 코드로 승인**에서 입력한다. 요청한 권한을 확인하고 승인하면 CLI에 연결된다. 기본 요청 권한은 `profile:read` 하나다. `profile`, `product`, `content`, `creator-content`, `skill`, `platform`, `custom-page` 묶음은 각각 읽기·쓰기를 모두 요청한다(`creator-content:publish`, `skill:publish`, `custom-page:publish`는 별도 명시가 필요하다). 명령별 필요 권한은 각 명령의 `--help`와 아래 절의 권한 표에 적혀 있다. `platform`은 내 콘텐츠의 서버 키·공유 문서 관리 전용 권한이다(아래 "플랫폼 전용 PAT 도구" 절 참고). 소셜 로그인 사용자도 앱에서 승인할 수 있다. 웹 승인 화면은 별도 후속 단계이므로 현재는 앱 승인을 사용한다.
 
 수동 발급한 토큰은 `clack login --token`의 숨김 프롬프트에 붙여 넣는다. 비대화형 실행에서는 이 명령의 표준 입력으로 전달할 수 있다. `--token <값>`도 지원하지만 셸 기록을 피하려면 프롬프트나 `CLACK_TOKEN` 환경변수를 사용한다. 토큰 원문은 정상 결과·오류·상세 로그에 출력하지 않는다.
 
@@ -156,7 +156,17 @@ GitHub Actions는 Linux·macOS·Windows × Node 20·22에서 `pnpm check`와 패
 
 ## HTML 콘텐츠 개발 테스트
 
-크리에이터 콘텐츠는 기존 게시글·포켓과 별도 권한을 사용합니다. 개발 환경에서 초안 등록·HTML/ZIP 업로드를 검증할 수 있습니다. 앱 확인·AI 심사 후 공개·채팅 제작은 아직 준비 중이며 CLI로 확인 요건을 우회할 수 없습니다.
+크리에이터 콘텐츠는 기존 게시글·포켓과 별도 권한을 사용합니다. 앱 확인·심사·공개 기능의 제공 여부는 환경마다 다르며 `clack content config`의 `app_preview_enabled`·`review_enabled`·`publication_enabled`로 확인합니다. CLI로 앱 확인 요건을 우회할 수 없습니다.
+
+| 명령 | 필요한 PAT 권한 |
+|---|---|
+| `config` | 없음(로그인 불필요) |
+| `list`, `status`, `preview` | `creator-content:read` |
+| `create`, `upload`, `complete`, `withdraw` | `creator-content:write` |
+| `submit` | `creator-content:write`와 `creator-content:publish` 모두 |
+| `publish`, `unpublish` | `creator-content:publish` |
+
+제출 순서는 `upload` → `preview`(같은 계정의 앱에서 열어 확인 완료) → `submit`입니다. 앱 확인 전에 제출하면 `PREVIEW_CONFIRMATION_REQUIRED`(409)가 반환됩니다.
 
 ```bash
 clack login --env dev --scopes creator-content:read,creator-content:write,creator-content:publish
@@ -167,7 +177,7 @@ clack content status --env dev <콘텐츠-UUID>
 clack content preview --env dev <콘텐츠-UUID> <버전-UUID>
 ```
 
-`content upload`는 최대 30 MiB의 HTML/ZIP을 체크섬과 함께 비공개 저장소에 전송합니다. 전송 후 완료 응답만 실패하면 출력된 `content complete` 명령으로 같은 업로드를 재처리할 수 있습니다. `--dry-run`은 파일·입력 검사만 수행합니다. `creator-content` 약식 scope는 읽기·쓰기만 요청하며 공개 권한은 명시적으로 요청해야 합니다. 정책 내용을 크리에이터 센터에서 확인한 뒤 `--policy-version`으로 동의한 버전을 지정하세요.
+`content upload`는 최대 30 MiB의 HTML/ZIP을 체크섬과 함께 비공개 저장소에 전송합니다. 전송 후 완료 응답만 실패하면 출력된 `content complete` 명령으로 같은 업로드를 재처리할 수 있습니다. `--dry-run`은 파일·입력 검사만 수행합니다. `creator-content` 약식 scope는 읽기·쓰기만 요청하며 `submit`·`publish`·`unpublish`에 필요한 `creator-content:publish`는 명시적으로 요청해야 합니다. 정책 내용을 크리에이터 센터에서 확인한 뒤 `--policy-version`으로 동의한 버전을 지정하세요.
 
 ZIP에 `clack.content.json` 또는 `.clack/`가 있으면 업로드 전에 선언·경로·크기와 프로필 파일 대응을 확인하고 표준 오류에 경고합니다. 선언이 없는 기존 정적 ZIP도 계속 업로드할 수 있습니다. 경고는 업로드를 막지 않으며 서버의 최종 검증·심사 결과를 대신하지 않습니다. 전송 없이 확인하려면 `content upload ... --dry-run`을 사용하세요.
 
@@ -179,7 +189,7 @@ clack content publish --env dev <콘텐츠-UUID> <버전-UUID>
 
 ## 스킬 패키지 개발 검증
 
-`clack.skill.json`과 `SKILL.md`가 있는 디렉터리 또는 ZIP을 검사합니다. 로컬 검증은 로그인 없이 실행할 수 있습니다. 서버 경로는 현재 개발 환경에서 기능 플래그가 켜진 계정과 `skill:write` 권한의 개인 액세스 토큰이 필요합니다.
+`clack.skill.json`과 `SKILL.md`가 있는 디렉터리 또는 ZIP을 검사합니다. 로컬 검증은 로그인 없이 실행할 수 있습니다. 서버 경로(`validate --remote`, `push` 등)는 현재 개발 환경에서 기능 플래그가 켜진 계정과 아래 표의 권한을 가진 개인 액세스 토큰이 필요합니다.
 
 ```sh
 clack skill validate ./my-skill
@@ -200,7 +210,15 @@ clack skill deprecate <스킬-UUID> --env dev
 
 `push`는 서버 사전 검증 후 새 스킬 또는 기존 스킬의 버전을 예약하고, 서명된 URL에 ZIP을 전송한 뒤 완료 처리합니다. 완료 응답만 실패하면 출력된 `skill complete` 명령으로 같은 버전을 재처리합니다. `--dry-run`은 서버를 변경하지 않습니다.
 
-`list`·`get`·`form`·`status`는 `skill:read`, `cancel`·`deprecate`는 `skill:write`, `submit`은 `skill:write`와 `skill:publish`, `release`는 `skill:publish` 권한이 필요합니다. 변경 명령은 개인 액세스 토큰(PAT)만 사용합니다. `submit`은 서버에서 검증 완료 상태와 패키지 해시를 조회한 뒤 확인을 받고 심사를 요청합니다. `--dry-run`은 제출 요청 없이 상태만 확인합니다. `release`는 심사를 통과한 버전만 허용하고, `--visibility public`은 별도 라이브러리 등재 승인이 필요합니다. 심사 판정은 관리자 화면에서 처리합니다. `deprecate`는 스킬 전체를 지원 종료 상태로 바꾸며 되돌릴 수 없습니다. 확인 후에만 실행되고(비대화형은 `--yes` 필요), 새 설치·새 제작은 막히지만 기존 콘텐츠가 고정한 버전은 계속 동작합니다.
+| 명령 | 필요한 PAT 권한 |
+|---|---|
+| `validate`(로컬) | 없음(로그인 불필요) |
+| `list`, `get`, `form`, `status` | `skill:read` |
+| `validate --remote`, `push`, `complete`, `cancel` | `skill:write` |
+| `submit` | `skill:write`와 `skill:publish` 모두 |
+| `release`, `deprecate` | `skill:publish` |
+
+`clack login --scopes skill` 약식은 읽기·쓰기만 요청하므로 제출·게시·지원 종료에는 `skill:publish`를 추가해야 합니다. 변경 명령은 개인 액세스 토큰(PAT)만 사용합니다. `submit`은 서버에서 검증 완료 상태와 패키지 해시를 조회한 뒤 확인을 받고 심사를 요청합니다. `--dry-run`은 제출 요청 없이 상태만 확인합니다. `release`는 심사를 통과한 버전만 허용하고, `--visibility public`은 별도 라이브러리 등재 승인이 필요합니다. 심사 판정은 관리자 화면에서 처리합니다. `deprecate`는 스킬 전체를 지원 종료 상태로 바꾸며 되돌릴 수 없습니다. 확인 후에만 실행되고(비대화형은 `--yes` 필요), 새 설치·새 제작은 막히지만 기존 콘텐츠가 고정한 버전은 계속 동작합니다.
 
 ### 스킬 플러그인 정적 검사(plugin-static-v2)
 
@@ -252,14 +270,14 @@ clack platform data patch scores slot --file ./score-patch.json --if-rev 1 --env
 clack platform data delete scores slot --env dev
 ```
 
-`clack mcp config --platform --env dev`는 서버 키 조회와 PAT 개인 도구를 함께 쓸 수 있는 로컬 stdio MCP 설정을 출력합니다. 에이전트 실행 환경에 서버 키 도구용 `CLACK_SERVER_KEY`, 스킬·콘텐츠 공개·공유 문서 도구용 `CLACK_TOKEN`(`platform:read`/`platform:write`, 필요 시 `skill:*`·`creator-content:publish`)을 각각 필요한 만큼만 설정합니다. 둘 다 로컬 프로세스 환경변수로만 전달되며 CLI 자격 파일에서 자동으로 읽지 않습니다. Claude 설정 조각은 기본 출력, Codex 설정 조각은 `--codex`로 받습니다. 설정에는 키·토큰 원문이 들어가지 않습니다.
+`clack mcp config --platform --env dev`는 서버 키 조회와 PAT 개인 도구를 함께 쓸 수 있는 로컬 stdio MCP 설정을 출력합니다. 에이전트 실행 환경에 서버 키 도구용 `CLACK_SERVER_KEY`, 스킬·제작·콘텐츠 공개·공유 문서 도구용 `CLACK_TOKEN`(`platform:read`/`platform:write`, 필요 시 `skill:*`, 제작은 `creator-content:write`, 콘텐츠 공개는 `creator-content:publish`)을 각각 필요한 만큼만 설정합니다. 둘 다 로컬 프로세스 환경변수로만 전달되며 CLI 자격 파일에서 자동으로 읽지 않습니다. Claude 설정 조각은 기본 출력, Codex 설정 조각은 `--codex`로 받습니다. 설정에는 키·토큰 원문이 들어가지 않습니다.
 
 ```sh
 clack mcp config --platform --env dev
 clack mcp config --platform --codex --env dev
 ```
 
-서버 키(`CLACK_SERVER_KEY`) 도구는 `platform_usage_get`, `platform_server_data_get/list/leaderboard/put/patch/delete`입니다. PAT(`CLACK_TOKEN`) 도구는 `platform_skill_list/get/push/status/submit/release`, `platform_content_publish`, `platform_shared_collections_list`, `platform_shared_documents_list`, `platform_shared_document_get/hide/delete`입니다. `platform_skill_push`는 `dir`(생략 시 현재 디렉터리)의 로컬 스킬 패키지를 검증·업로드합니다. 파괴적 도구(단일 문서 변경, 스킬 심사 제출·공개, 콘텐츠 공개, 공유 문서 숨김·삭제)는 먼저 미리보기와 `confirmation_required`를 반환하고, 입력에 `confirm: true`를 명시해야 실제 요청을 보냅니다. `mcp serve-platform`은 MCP 클라이언트가 실행하는 명령으로, 표준 출력은 JSON-RPC 메시지 전용입니다. 서버 키·PAT의 인증·스코프·테넌트 검사는 모두 API에서 수행합니다.
+서버 키(`CLACK_SERVER_KEY`) 도구는 `platform_usage_get`, `platform_server_data_get/list/leaderboard/put/patch/delete`입니다. PAT(`CLACK_TOKEN`) 도구는 `platform_authoring`, `platform_skill_list/get/push/status/submit/release`, `platform_content_publish`, `platform_shared_collections_list`, `platform_shared_documents_list`, `platform_shared_document_get/hide/delete`입니다. `platform_skill_push`는 `dir`(생략 시 현재 디렉터리)의 로컬 스킬 패키지를 검증·업로드합니다. 파괴적 도구(단일 문서 변경, 스킬 심사 제출·공개, 콘텐츠 공개, 공유 문서 숨김·삭제)는 먼저 미리보기와 `confirmation_required`를 반환하고, 입력에 `confirm: true`를 명시해야 실제 요청을 보냅니다. `mcp serve-platform`은 MCP 클라이언트가 실행하는 명령으로, 표준 출력은 JSON-RPC 메시지 전용입니다. 서버 키·PAT의 인증·스코프·테넌트 검사는 모두 API에서 수행합니다.
 
 ## 세계관·공개 홈 꾸미기
 

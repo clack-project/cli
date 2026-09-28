@@ -125,7 +125,7 @@ async function tokenInput(option: string | boolean | undefined): Promise<string>
 export function registerAuthCommands(program: Command, runtime: Runtime, store: ConfigStore): void {
   runtime.action(program.command('login').description('앱에서 승인하거나 개인 액세스 토큰으로 연결')
     .option('--token [pat]', '토큰 입력. 값을 생략하면 숨김 프롬프트 또는 표준 입력 사용')
-    .option('--scopes <scopes>', '요청 권한 (쉼표 구분)', 'profile:read')
+    .option('--scopes <scopes>', '요청 권한 (쉼표 구분). product 같은 묶음 이름은 :read·:write만 요청하며, 제출·게시에 필요한 *:publish는 따로 적는다', 'profile:read')
     .option('--no-browser', '브라우저 자동 열기 생략').option('--no-qr', 'QR 코드 출력 생략 (에이전트·비대화형 환경에 적합)')
     .option('--label <name>', '기기 이름', hostname())
     .option('--no-wait', '코드만 발급하고 승인을 기다리지 않음 (같은 턴을 끝내야 하는 에이전트에 적합, 이후 clack login --resume으로 이어받음)')

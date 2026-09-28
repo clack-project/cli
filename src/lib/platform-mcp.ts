@@ -44,7 +44,7 @@ function parsePat<T>(schema: z.ZodType<T>, input: unknown, label: string): T {
 }
 
 const toolDefinitions = [
-  { name: 'platform_authoring', description: '공개 스킬 제작 세션·폼·자산·이미지 생성·패키징을 처리합니다. 이미지 생성에는 견적 승인 가격과 멱등성 키가 필요합니다.', inputSchema: { type: 'object', ...z.toJSONSchema(authoringInput) }, annotations: { readOnlyHint: false, destructiveHint: false } },
+  { name: 'platform_authoring', description: '공개 스킬 제작 세션·폼·자산·이미지 생성·패키징을 처리합니다. 이미지 생성에는 견적 승인 가격과 멱등성 키가 필요합니다. creator-content:write 권한이 필요합니다.', inputSchema: { type: 'object', ...z.toJSONSchema(authoringInput) }, annotations: { readOnlyHint: false, destructiveHint: false } },
   { name: 'platform_usage_get', description: '서버 키가 속한 콘텐츠의 플랫폼 사용량을 조회합니다.',
     inputSchema: z.toJSONSchema(platformReadSchemas.usage), annotations: { readOnlyHint: true, destructiveHint: false } },
   { name: 'platform_server_data_get', description: '서버 키로 콘텐츠 데이터 문서를 조회합니다. data:read 권한이 필요합니다.',
@@ -60,15 +60,15 @@ const toolDefinitions = [
   { name: 'platform_server_data_delete', description: '서버 키로 단일 문서를 삭제하거나 숨깁니다. confirm:true가 필요합니다.',
     inputSchema: z.toJSONSchema(platformReadSchemas.delete), annotations: { readOnlyHint: false, destructiveHint: true } },
   // 아래는 개인 액세스 토큰(CLACK_TOKEN, pat_)으로 동작하는 개인 도구다. 서버 키 도구와 인증 평면이 다르다.
-  { name: 'platform_skill_list', description: '공개 스킬 목록을 이름으로 검색합니다.',
+  { name: 'platform_skill_list', description: '공개 스킬 목록을 이름으로 검색합니다. skill:read 권한이 필요합니다.',
     inputSchema: z.toJSONSchema(patSchemas.skillList), annotations: { readOnlyHint: true, destructiveHint: false } },
-  { name: 'platform_skill_get', description: '스킬 상세를 이름(slug)으로 조회합니다.',
+  { name: 'platform_skill_get', description: '스킬 상세를 이름(slug)으로 조회합니다. skill:read 권한이 필요합니다.',
     inputSchema: z.toJSONSchema(patSchemas.skillGet), annotations: { readOnlyHint: true, destructiveHint: false } },
   { name: 'platform_skill_push', description: '로컬 스킬 디렉터리를 검증하고 새 버전으로 업로드합니다. dir을 생략하면 현재 디렉터리를 사용합니다. skill:write 권한이 필요합니다.',
     inputSchema: z.toJSONSchema(patSchemas.skillPush), annotations: { readOnlyHint: false, destructiveHint: false } },
-  { name: 'platform_skill_status', description: '내 스킬 버전의 심사·게시 상태를 조회합니다.',
+  { name: 'platform_skill_status', description: '내 스킬 버전의 심사·게시 상태를 조회합니다. skill:read 권한이 필요합니다.',
     inputSchema: z.toJSONSchema(patSchemas.skillVersionRef), annotations: { readOnlyHint: true, destructiveHint: false } },
-  { name: 'platform_skill_submit', description: '검증 완료한 스킬 버전을 심사에 제출합니다. skill:write·skill:publish 권한과 confirm:true가 필요합니다.',
+  { name: 'platform_skill_submit', description: '검증 완료한 스킬 버전을 심사에 제출합니다. skill:write와 skill:publish 권한(둘 다)과 confirm:true가 필요합니다.',
     inputSchema: z.toJSONSchema(patSchemas.skillSubmit), annotations: { readOnlyHint: false, destructiveHint: true } },
   { name: 'platform_skill_release', description: '승인된 스킬 버전을 공개 범위로 게시합니다. skill:publish 권한과 confirm:true가 필요합니다.',
     inputSchema: z.toJSONSchema(patSchemas.skillRelease), annotations: { readOnlyHint: false, destructiveHint: true } },
@@ -166,7 +166,7 @@ export class PlatformMcpServer {
     }
   }
 
-  /** 개인 액세스 토큰(platform:read·platform:write와 skill:*, creator-content:publish 스코프) 기반 도구. */
+  /** 개인 액세스 토큰(platform:read·platform:write, skill:*, creator-content:write·publish 스코프) 기반 도구. */
   private async callPatTool(name: string, args: unknown): Promise<unknown> {
     if (patDestructiveToolNames.has(name) && (!isObject(args) || args.confirm !== true)) {
       return { preview: true, confirmation_required: true, tool: name, arguments: redact(args) };

@@ -24,7 +24,14 @@ function serverData<T>(schema: z.ZodType<T>, value: unknown): T {
   return parsed.data;
 }
 
-function ensurePat(client: ApiClient, message = '스킬 업로드에는 skill:write 권한의 개인 액세스 토큰(pat_)이 필요합니다.'): string {
+// 명령별 필요 권한은 서버의 PAT 권한 규칙과 같아야 한다. 메시지를 생략하면 skill:write 명령(서버 검증·업로드·완료) 문구를 쓴다.
+const PAT_FOR_WRITE = '스킬 서버 검증·업로드·완료 처리에는 skill:write 권한의 개인 액세스 토큰(pat_)이 필요합니다.';
+const PAT_FOR_SUBMIT = '스킬 심사 제출에는 skill:write와 skill:publish 권한(둘 다)의 개인 액세스 토큰(pat_)이 필요합니다.';
+const PAT_FOR_CANCEL = '스킬 업로드·심사 취소에는 skill:write 권한의 개인 액세스 토큰(pat_)이 필요합니다.';
+const PAT_FOR_RELEASE = '스킬 게시에는 skill:publish 권한의 개인 액세스 토큰(pat_)이 필요합니다.';
+const PAT_FOR_DEPRECATE = '스킬 지원 종료에는 skill:publish 권한의 개인 액세스 토큰(pat_)이 필요합니다.';
+
+function ensurePat(client: ApiClient, message = PAT_FOR_WRITE): string {
   const token = client.settings.token;
   if (!token || !/^pat_[a-f0-9]{64}$/.test(token)) {
     throw new CliError(message, 'SKILL_PAT_REQUIRED', 401);
@@ -88,8 +95,8 @@ export async function pushSkillVersion(client: ApiClient, prepared: PreparedSkil
 }
 
 export function registerSkillCommands(program: Command, runtime: Runtime): void {
-  const skill = program.command('skill').description('스킬 패키지 검사·업로드');
-  runtime.action(skill.command('list').option('-q, --query <text>', '스킬 이름 검색')
+  const skill = program.command('skill').description('스킬 패키지 검사·업로드·심사·게시 (skill:read·write·publish)');
+  runtime.action(skill.command('list').description('스킬 목록 검색 (skill:read)').option('-q, --query <text>', '스킬 이름 검색')
     .option('--category <category>', '분류').option('--entity <entity>', '산출물 엔티티(character)').option('--type <type>', '스킬 유형(template|instruction|tool)').option('--official <value>', '공식 스킬만 true 또는 false')
     .option('--cursor <id>', '다음 페이지 UUID').option('--all', '모든 페이지 조회'), async (ctx, _args, opts) => {
     const query = opts.query === undefined ? undefined : z.string().trim().min(1).max(100).safeParse(opts.query);
@@ -125,22 +132,23 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
       cursor = next;
     }
   });
-  runtime.action(skill.command('get <slug>'), async (ctx, [value]) => {
+  runtime.action(skill.command('get <slug>').description('스킬 상세 조회 (skill:read)'), async (ctx, [value]) => {
     const parsed = skillSlug.safeParse(value);
     if (!parsed.success) throw new CliError('스킬 이름을 확인하세요.');
     ctx.output(await ctx.api.request('GET', `/v4/skills/${parsed.data}`));
   });
-  runtime.action(skill.command('form <slug> <version>'), async (ctx, [value, version]) => {
+  runtime.action(skill.command('form <slug> <version>').description('스킬 버전 입력 양식 조회 (skill:read)'), async (ctx, [value, version]) => {
     const parsed = skillSlug.safeParse(value);
     const parsedVersion = semver.safeParse(version);
     if (!parsed.success || !parsedVersion.success) throw new CliError('스킬 이름과 버전을 확인하세요.');
     ctx.output(await ctx.api.request('GET', `/v4/skills/${parsed.data}/versions/${parsedVersion.data}/form`));
   });
-  runtime.action(skill.command('status <skill-id> <version-id>'), async (ctx, [skillId, versionId]) => {
+  runtime.action(skill.command('status <skill-id> <version-id>').description('내 스킬 버전의 심사·게시 상태 조회 (skill:read)'), async (ctx, [skillId, versionId]) => {
     const ids = skillVersionIds(skillId, versionId);
     ctx.output(await ctx.api.request('GET', `/v4/creator/skills/${ids.skillId}/versions/${ids.versionId}`));
   });
-  runtime.action(skill.command('validate [dir]').option('--remote', '서버에서도 패키지를 드라이런 검증'), async (ctx, [dir], opts) => {
+  runtime.action(skill.command('validate [dir]').description('스킬 패키지 로컬 검사 (로그인 불필요, --remote는 skill:write)')
+    .option('--remote', '서버에서도 패키지를 드라이런 검증 (skill:write)'), async (ctx, [dir], opts) => {
     const prepared = await prepareSkillPackage(dir ?? '.');
     if (opts.remote && !ctx.options.dryRun) {
       const remote = await validateSkillRemotely(ctx.api, prepared.bytes);
@@ -149,7 +157,8 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
     } else ctx.output({ local_valid: true, sha256: prepared.sha256, byte_size: prepared.bytes.length,
       file_count: prepared.file_count, manifest: prepared.manifest, ...(opts.remote ? { remote_skipped: true } : {}) });
   });
-  runtime.action(skill.command('push [dir]').option('--skill-id <id>', '기존 스킬 ID에 새 버전 추가'), async (ctx, [dir], opts) => {
+  runtime.action(skill.command('push [dir]').description('스킬 패키지 검증 후 새 버전 업로드 (skill:write)')
+    .option('--skill-id <id>', '기존 스킬 ID에 새 버전 추가'), async (ctx, [dir], opts) => {
     const prepared = await prepareSkillPackage(dir ?? '.');
     if (prepared.manifest.type !== 'instruction' && prepared.manifest.type !== 'template') {
       throw new CliError('현재 스킬 업로드는 instruction·template 유형만 지원합니다.', 'SKILL_TYPE_UNSUPPORTED');
@@ -164,7 +173,7 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
     }
     ctx.output(await pushSkillVersion(ctx.api, prepared, skillIdOption?.data));
   });
-  runtime.action(skill.command('complete <skill-id> <version-id>'), async (ctx, [skillId, versionId]) => {
+  runtime.action(skill.command('complete <skill-id> <version-id>').description('업로드한 스킬 버전 완료 처리 재시도 (skill:write)'), async (ctx, [skillId, versionId]) => {
     ensurePat(ctx.api);
     const parsedSkillId = uuid.safeParse(skillId);
     const parsedVersionId = uuid.safeParse(versionId);
@@ -172,8 +181,8 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
     if (ctx.options.dryRun) { ctx.output({ dry_run: true, skill_id: parsedSkillId.data, version_id: parsedVersionId.data }); return; }
     ctx.output(await ctx.api.request('POST', `/v4/creator/skills/${parsedSkillId.data}/versions/${parsedVersionId.data}/complete`));
   });
-  runtime.action(skill.command('submit <skill-id> <version-id>'), async (ctx, [skillId, versionId]) => {
-    ensurePat(ctx.api, '스킬 심사 제출에는 skill:write와 skill:publish 권한의 개인 액세스 토큰(pat_)이 필요합니다.');
+  runtime.action(skill.command('submit <skill-id> <version-id>').description('검증 완료한 스킬 버전 심사 제출 (skill:write와 skill:publish 둘 다 필요)'), async (ctx, [skillId, versionId]) => {
+    ensurePat(ctx.api, PAT_FOR_SUBMIT);
     const ids = skillVersionIds(skillId, versionId);
     const path = `/v4/creator/skills/${ids.skillId}/versions/${ids.versionId}`;
     const current = serverData(managedVersionSchema, (await ctx.api.request('GET', path)).data);
@@ -189,8 +198,8 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
     await ctx.confirm(`${current.version} 버전(패키지 ${current.package_hash})을 심사에 제출할까요?`);
     ctx.output(await ctx.api.request('POST', `${path}/submit`));
   });
-  runtime.action(skill.command('deprecate <skill-id>').description('스킬을 지원 종료한다 (되돌릴 수 없음, 새 설치·새 제작 불가)'), async (ctx, [skillId]) => {
-    ensurePat(ctx.api);
+  runtime.action(skill.command('deprecate <skill-id>').description('스킬을 지원 종료한다 (되돌릴 수 없음, 새 설치·새 제작 불가, skill:publish)'), async (ctx, [skillId]) => {
+    ensurePat(ctx.api, PAT_FOR_DEPRECATE);
     const parsedSkillId = uuid.safeParse(skillId);
     if (!parsedSkillId.success) throw new CliError('스킬 ID는 UUID여야 합니다.');
     const path = `/v4/creator/skills/${parsedSkillId.data}/deprecate`;
@@ -198,17 +207,18 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
     await ctx.confirm('이 스킬을 지원 종료할까요? 되돌릴 수 없으며 새 설치·새 제작이 불가능합니다(기존 콘텐츠의 고정 버전은 유지됩니다).');
     ctx.output(await ctx.api.request('POST', path));
   });
-  runtime.action(skill.command('cancel <skill-id> <version-id>'), async (ctx, [skillId, versionId]) => {
-    ensurePat(ctx.api);
+  runtime.action(skill.command('cancel <skill-id> <version-id>').description('스킬 버전의 업로드 또는 심사 취소 (skill:write)'), async (ctx, [skillId, versionId]) => {
+    ensurePat(ctx.api, PAT_FOR_CANCEL);
     const ids = skillVersionIds(skillId, versionId);
     const path = `/v4/creator/skills/${ids.skillId}/versions/${ids.versionId}`;
     if (ctx.options.dryRun) { ctx.output({ dry_run: true, method: 'POST', path: `${path}/cancel` }); return; }
     await ctx.confirm('이 스킬 버전의 업로드 또는 심사를 취소할까요?');
     ctx.output(await ctx.api.request('POST', `${path}/cancel`));
   });
-  runtime.action(skill.command('release <skill-id> <version-id>').requiredOption('--visibility <value>', 'private|unlisted|public'),
+  runtime.action(skill.command('release <skill-id> <version-id>').description('승인된 스킬 버전을 공개 범위로 게시 (skill:publish)')
+    .requiredOption('--visibility <value>', 'private|unlisted|public'),
     async (ctx, [skillId, versionId], opts) => {
-      ensurePat(ctx.api);
+      ensurePat(ctx.api, PAT_FOR_RELEASE);
       const ids = skillVersionIds(skillId, versionId);
       const selected = visibility.safeParse(opts.visibility);
       if (!selected.success) throw new CliError('공개 범위는 private, unlisted, public 중 하나여야 합니다.');

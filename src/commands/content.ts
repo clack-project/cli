@@ -67,16 +67,17 @@ const documentKey = collection;
 const keyId = (value: unknown) => { const id = String(value); if (!/^[1-9][0-9]*$/.test(id) || !Number.isSafeInteger(Number(id))) throw new CliError('서버 키 ID는 양의 정수여야 합니다.'); return id; };
 
 export function registerContentCommands(program: Command, runtime: Runtime): void {
-  const content = program.command('content').description('HTML 콘텐츠 등록·앱 확인·심사 관리');
-  runtime.action(content.command('config'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/config', { auth: false })));
-  runtime.action(content.command('list'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/contents')));
-  runtime.action(content.command('status <id>'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}`)));
-  runtime.action(content.command('create').requiredOption('--title <text>', '제목').option('--description <text>', '설명', '')
+  // 괄호 안 권한 표기는 서버의 PAT 권한 규칙과 같아야 한다. 서버는 submit에만 write·publish 두 권한을 모두 요구한다.
+  const content = program.command('content').description('HTML 콘텐츠 등록·앱 확인·심사 관리 (creator-content:read·write·publish)');
+  runtime.action(content.command('config').description('콘텐츠 기능 제공 여부·설정 조회 (로그인 불필요)'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/config', { auth: false })));
+  runtime.action(content.command('list').description('내 콘텐츠 목록 (creator-content:read)'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/contents')));
+  runtime.action(content.command('status <id>').description('콘텐츠와 버전별 업로드·심사·공개 상태 (creator-content:read)'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}`)));
+  runtime.action(content.command('create').description('콘텐츠 초안 등록 (creator-content:write)').requiredOption('--title <text>', '제목').option('--description <text>', '설명', '')
     .option('--kind <kind>', 'html|gallery|slideshow|video', 'html').requiredOption('--policy-version <version>', '동의한 콘텐츠 제공 정책 버전'), async (ctx, _args, opts) => {
     const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion });
     await mutate(ctx, 'POST', '/v4/creator/contents', body);
   });
-  runtime.action(content.command('upload <id> <file>')
+  runtime.action(content.command('upload <id> <file>').description('HTML/ZIP 업로드로 새 비공개 버전 생성 (creator-content:write)')
     .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close']))
     .addOption(new Option('--color <scheme>', '헤더 색상').choices(['light', 'dark'])), async (ctx, [id, file], opts) => {
     const path = `/v4/creator/contents/${uuid(id)}`;
@@ -92,47 +93,48 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
       throw error;
     }
   });
-  runtime.action(content.command('complete <id> <upload-id>'), async (ctx, [id, uploadId]) =>
+  runtime.action(content.command('complete <id> <upload-id>').description('업로드 완료 처리 재시도 (creator-content:write)'), async (ctx, [id, uploadId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/uploads/${uuid(uploadId)}/complete`));
-  runtime.action(content.command('preview <id> <version-id>'), async (ctx, [id, versionId]) =>
+  runtime.action(content.command('preview <id> <version-id>').description('앱 확인용 미리보기 링크 조회 (creator-content:read)'), async (ctx, [id, versionId]) =>
     ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/preview`)));
-  runtime.action(content.command('submit <id> <version-id>'), async (ctx, [id, versionId]) =>
+  runtime.action(content.command('submit <id> <version-id>')
+    .description('앱에서 확인 완료한 버전의 심사 제출, 통과 시 공개 (creator-content:write와 creator-content:publish 둘 다 필요)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/submit`, { publish_on_approval: true }, '이 버전을 심사하고 통과하면 공개할까요?'));
-  runtime.action(content.command('withdraw <id> <version-id>'), async (ctx, [id, versionId]) =>
+  runtime.action(content.command('withdraw <id> <version-id>').description('진행 중인 심사 취소 (creator-content:write)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/review/cancel`, undefined, '이 버전의 심사를 취소할까요?'));
   // 승인은 됐지만 아직 공개하지 않은 버전을 나중에 공개한다. creator-content:publish 권한이 필요하다.
-  runtime.action(content.command('publish <id> <version-id>'), async (ctx, [id, versionId]) =>
+  runtime.action(content.command('publish <id> <version-id>').description('승인됐지만 공개하지 않은 버전 공개 (creator-content:publish)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/publish`, undefined, '승인된 이 버전을 공개할까요?'));
-  runtime.action(content.command('unpublish <id>'), async (ctx, [id]) =>
+  runtime.action(content.command('unpublish <id>').description('콘텐츠 게시 중단 (creator-content:publish)'), async (ctx, [id]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/unpublish`, undefined, '콘텐츠 게시를 중단할까요?'));
 
   // 서버 키(csk_)는 PAT로 조회·폐기만 한다. 발급·회전은 크리에이터 센터 세션 전용이라 CLI는 안내만 하고 요청을 보내지 않는다.
   const serverKeys = content.command('server-keys').description('콘텐츠 서버 키 조회·폐기 (platform:read·platform:write, 발급·회전은 크리에이터 센터)');
-  runtime.action(serverKeys.command('list <id>'), async (ctx, [id]) =>
+  runtime.action(serverKeys.command('list <id>').description('서버 키 목록 (platform:read)'), async (ctx, [id]) =>
     ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}/server-keys`)));
   for (const name of ['issue', 'rotate']) {
     runtime.action(serverKeys.command(name).description('크리에이터 센터 전용 안내').argument('[args...]').allowUnknownOption(), async () => {
       throw new CliError(SERVER_KEY_CENTER_ONLY, 'SERVER_KEY_CENTER_ONLY', 403);
     });
   }
-  runtime.action(serverKeys.command('revoke <id> <key-id>'), async (ctx, [id, keyIdValue]) =>
+  runtime.action(serverKeys.command('revoke <id> <key-id>').description('서버 키 즉시 폐기 (platform:write)'), async (ctx, [id, keyIdValue]) =>
     mutate(ctx, 'DELETE', `/v4/creator/contents/${uuid(id)}/server-keys/${keyId(keyIdValue)}`, undefined, '이 서버 키를 즉시 폐기할까요?'));
 
   // 공유(shared) 문서는 이용자가 쓴 콘텐츠 데이터다. 콘텐츠 소유자는 모더레이션 목적으로 숨기거나 삭제할 수 있다.
   const shared = content.command('shared').description('공유 문서 조회·숨김·삭제 (platform:read·platform:write)');
-  runtime.action(shared.command('collections <id>'), async (ctx, [id]) =>
+  runtime.action(shared.command('collections <id>').description('공유 문서 컬렉션 이름 (platform:read)'), async (ctx, [id]) =>
     ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}/shared-document-collections`)));
-  runtime.action(shared.command('list <id> <collection>').option('--limit <count>', '1~100개, 기본 50'), async (ctx, [id, collectionValue], opts) =>
+  runtime.action(shared.command('list <id> <collection>').description('공유 문서 목록 (platform:read)').option('--limit <count>', '1~100개, 기본 50'), async (ctx, [id, collectionValue], opts) =>
     ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}/shared-documents/${parse(collection, collectionValue)}`,
       { query: { limit: opts.limit } })));
-  runtime.action(shared.command('get <id> <collection> <key>'), async (ctx, [id, collectionValue, keyValue]) =>
+  runtime.action(shared.command('get <id> <collection> <key>').description('공유 문서 하나 조회 (platform:read)'), async (ctx, [id, collectionValue, keyValue]) =>
     ctx.output(await ctx.api.request('GET',
       `/v4/creator/contents/${uuid(id)}/shared-documents/${parse(collection, collectionValue)}/${parse(documentKey, keyValue)}`)));
-  runtime.action(shared.command('hide <id> <collection> <key>'), async (ctx, [id, collectionValue, keyValue]) =>
+  runtime.action(shared.command('hide <id> <collection> <key>').description('공유 문서 숨김 (platform:write)'), async (ctx, [id, collectionValue, keyValue]) =>
     mutate(ctx, 'POST',
       `/v4/creator/contents/${uuid(id)}/shared-documents/${parse(collection, collectionValue)}/${parse(documentKey, keyValue)}/hide`,
       undefined, '이 공유 문서를 숨길까요? 목록·순위에서 제외되며 문서 자체는 남습니다.'));
-  runtime.action(shared.command('delete <id> <collection> <key>'), async (ctx, [id, collectionValue, keyValue]) =>
+  runtime.action(shared.command('delete <id> <collection> <key>').description('공유 문서 영구 삭제 (platform:write)'), async (ctx, [id, collectionValue, keyValue]) =>
     mutate(ctx, 'DELETE',
       `/v4/creator/contents/${uuid(id)}/shared-documents/${parse(collection, collectionValue)}/${parse(documentKey, keyValue)}`,
       undefined, '이 공유 문서를 영구 삭제할까요?'));
