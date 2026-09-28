@@ -25,7 +25,9 @@ function run(command, args, cwd) {
 }
 
 try {
-  const [packed] = JSON.parse(run(npm, [...npmPrefix, 'pack', '--json', '--ignore-scripts', '--pack-destination', temporary], root));
+  const packOutput = JSON.parse(run(npm, [...npmPrefix, 'pack', '--json', '--ignore-scripts', '--pack-destination', temporary], root));
+  // npm 11 이하는 배열, npm 12부터는 패키지 이름을 키로 하는 객체를 반환한다.
+  const packed = Array.isArray(packOutput) ? packOutput[0] : packOutput[pkg.name] ?? Object.values(packOutput)[0];
   assert.equal(packed.name, '@clack-platform/cli');
   assert.equal(packed.version, pkg.version);
   const paths = packed.files.map((file) => file.path);

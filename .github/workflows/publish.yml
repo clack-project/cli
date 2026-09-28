@@ -31,8 +31,8 @@ jobs:
           node-version: '22'
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - name: npm 신뢰 게시에 필요한 최신 npm 준비
-        run: npm i -g npm@latest
+      - name: npm 신뢰 게시에 필요한 npm 11 준비(11.5.1 이상)
+        run: npm i -g npm@11
       - name: 의존성 설치
         run: pnpm install --frozen-lockfile
       - name: 태그·패키지 버전 일치 검사
