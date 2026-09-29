@@ -10,7 +10,7 @@ const revision = (value: unknown): number => parse(z.coerce.number().int().nonne
 const base = '/v4/creator/custom-pages';
 const presentationSchema = z.object({
   schema_version: z.literal(1),
-  header_mode: z.enum(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close']),
+  header_mode: z.enum(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']),
   color_scheme: z.enum(['light', 'dark']),
 }).strict();
 
@@ -27,7 +27,7 @@ export function registerPageCommands(program: Command, runtime: Runtime): void {
     await mutate(ctx, 'POST', base, { target_type: opts.target, ...(opts.target === 'space' ? { space_id: uuid(opts.spaceId) } : {}), policy_version: policy });
   });
   runtime.action(page.command('upload <id> <file>').description('HTML/ZIP 업로드로 새 비공개 버전 생성 (custom-page:write)')
-    .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close']).default('fixed'))
+    .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']).default('fixed'))
     .addOption(new Option('--color <scheme>', '헤더 색상').choices(['light', 'dark']).default('light')), async (ctx, [id, file], opts) => {
     const path = `${base}/${uuid(id)}`;
     const prepared = await prepareContentFile(file!);
@@ -46,7 +46,7 @@ export function registerPageCommands(program: Command, runtime: Runtime): void {
   runtime.action(page.command('complete <id> <upload-id>').description('업로드 완료 처리 재시도 (custom-page:write)'), async (ctx, [id, uploadId]) =>
     mutate(ctx, 'POST', `${base}/${uuid(id)}/uploads/${uuid(uploadId)}/complete`, {}));
   runtime.action(page.command('presentation <id> <version-id>').description('파일은 두고 헤더 설정만 바꾼 새 버전 생성 (custom-page:write)')
-    .addOption(new Option('--header <mode>', '새 버전의 헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close']).makeOptionMandatory())
+    .addOption(new Option('--header <mode>', '새 버전의 헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']).makeOptionMandatory())
     .addOption(new Option('--color <scheme>', '새 버전의 헤더 색상').choices(['light', 'dark']).makeOptionMandatory()), async (ctx, [id, versionId], opts) =>
     mutate(ctx, 'POST', `${base}/${uuid(id)}/versions/${uuid(versionId)}/presentation`, {
       presentation: parse(presentationSchema, { schema_version: 1, header_mode: opts.header, color_scheme: opts.color }),

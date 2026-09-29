@@ -239,7 +239,15 @@ clack skill deprecate <스킬-UUID> --env dev
 
 - `clack skill validate [dir]`: 에디터 번들 구조·한도(파일 50개·파일 512 KiB·전체 2 MiB·코드 512 KiB)·번들 해시, `output.data` 스키마(`output-data.v1`: `pattern` 금지, `uniqueItems`는 스칼라 배열만), 예시 문서를 로컬에서 검사합니다. 지연 로드 의심(`loading="lazy"`·동적 `import()`·CSS `url()`)은 경고로만 알립니다. 에디터 코드의 구문 트리 정적 검사(`editor-static-v1`)와 심사는 서버 판정이 최종입니다.
 - `clack skill pack [dir] [-o out.zip] [--write-manifest]`: ZIP을 만들면서 `authoring.editor.sha256`을 번들 해시로 채웁니다. `--write-manifest`는 채운 값을 디렉터리의 `clack.skill.json`에도 기록합니다. `skill push`도 같은 값을 채워 올립니다.
-- `clack skill editor dev [--editor <dir>] [--document <json>] [--schema <json>]`: SDK의 모의 호스트로 `http://localhost:5170`에서 에디터를 열어 봅니다(로그인 불필요). SDK(`@clack/skill-editor-sdk`)는 `--sdk-dir`, `CLACK_SKILL_EDITOR_SDK_DIR`, 설치된 패키지, `CLACK_MONOREPO_DIR/clack-skill-editor-sdk` 순서로 찾으며, SDK에서 `pnpm build`를 먼저 실행해야 합니다.
+- `clack skill editor dev [--editor <dir>] [--document <json>] [--schema <json>]`: SDK의 모의 호스트로 `http://localhost:5170`에서 에디터를 열어 봅니다(로그인 불필요). SDK(`@clack/skill-editor-sdk`)는 `--sdk-dir`, `CLACK_SKILL_EDITOR_SDK_DIR`, 현재 디렉터리에서 설치된 패키지, `CLACK_MONOREPO_DIR/clack-skill-editor-sdk` 순서로 찾으며, SDK에서 `pnpm build`를 먼저 실행해야 합니다.
+
+스킬 에디터 SDK는 아직 npm에 공개되지 않았고 CLI 패키지에도 들어 있지 않습니다. SDK 소스 디렉터리(클랙 내부 작업자는 내부 저장소 체크아웃의 `clack-skill-editor-sdk`)에서 한 번 빌드한 뒤 그 위치를 알려 줍니다.
+
+```sh
+cd <내부 저장소>/clack-skill-editor-sdk && pnpm install && pnpm build
+clack skill editor dev --sdk-dir <내부 저장소>/clack-skill-editor-sdk --editor ./editor --schema ./output/data.schema.json --document ./examples/basic.json
+# 또는 CLACK_MONOREPO_DIR=<내부 저장소> clack skill editor dev ...
+```
 
 ## 플랫폼 전용 PAT 도구(서버 키·공유 문서·콘텐츠 공개)
 
@@ -316,7 +324,7 @@ clack page restore PAGE_ID PREVIOUS_VERSION_ID --revision 1
 clack page disable PAGE_ID --revision 2
 ```
 
-헤더는 `fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close` 중 선택한다. 파일과 헤더를 한 버전으로 저장하므로 헤더만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
+헤더는 `fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close`(전체 화면, 화면 끝까지), `floating_close_safe_area`(전체 화면, 안전 영역 안쪽) 중 선택한다. 파일과 헤더를 한 버전으로 저장하므로 헤더만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
 
 페이지 파일은 유지하고 헤더만 바꾸려면 `clack page presentation PAGE_ID VERSION_ID --header scroll_hide --color light`를 사용합니다. 새 비공개 버전이 만들어지며 응답의 새 버전 ID로 앱 확인과 심사를 다시 진행합니다. 기존 적용본은 유지됩니다.
 

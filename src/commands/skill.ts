@@ -185,7 +185,8 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
     .option('--document <file>', '초기 데이터 문서 JSON (기본: SDK 스타터 예시)')
     .option('--schema <file>', '데이터 스키마 output/data.schema.json (기본: SDK 스타터)')
     .option('--host-port <port>', '호스트 페이지 포트', '5170').option('--editor-port <port>', '에디터 포트', '5171')
-    .option('--sdk-dir <dir>', '@clack/skill-editor-sdk 위치 (기본: CLACK_SKILL_EDITOR_SDK_DIR, 설치된 패키지, CLACK_MONOREPO_DIR/clack-skill-editor-sdk 순)'),
+    .option('--sdk-dir <dir>', '@clack/skill-editor-sdk 위치 (기본: CLACK_SKILL_EDITOR_SDK_DIR, 설치된 패키지, CLACK_MONOREPO_DIR/clack-skill-editor-sdk 순)')
+    .addHelpText('after', `\n${SDK_LOCATION_HELP}\n`),
   async (ctx, _args, opts) => {
     const args: string[] = [];
     for (const [flag, value] of [['editor', opts.editor], ['document', opts.document], ['schema', opts.schema],
@@ -297,6 +298,10 @@ function editorReport(prepared: PreparedSkillPackage) {
     notice: '로컬 검사는 구조·한도·해시·데이터 스키마·예시까지입니다. 에디터 코드 정적 검사(editor-static-v1)와 심사는 서버 판정이 최종입니다.' };
 }
 
+/** SDK는 아직 npm에 없어 CLI 패키지에 포함되지 않는다. 도움말·오류에서 SDK를 얻고 알려 주는 방법을 같은 문구로 안내한다. */
+const SDK_LOCATION_HELP = 'SDK는 아직 npm에 공개되지 않아 CLI에 포함되지 않습니다. SDK 소스 디렉터리(클랙 내부 작업자는 내부 저장소의 clack-skill-editor-sdk)에서 '
+  + 'pnpm install && pnpm build를 실행한 뒤 --sdk-dir <SDK 디렉터리>, CLACK_SKILL_EDITOR_SDK_DIR=<SDK 디렉터리>, CLACK_MONOREPO_DIR=<내부 저장소> 중 하나로 위치를 지정하세요.';
+
 /** SDK 위치: --sdk-dir → CLACK_SKILL_EDITOR_SDK_DIR → 설치된 @clack/skill-editor-sdk → CLACK_MONOREPO_DIR/clack-skill-editor-sdk. */
 function resolveSdkDir(option: string | undefined): string {
   const candidates: string[] = [];
@@ -308,7 +313,7 @@ function resolveSdkDir(option: string | undefined): string {
     if (process.env.CLACK_MONOREPO_DIR) candidates.push(resolve(process.env.CLACK_MONOREPO_DIR, 'clack-skill-editor-sdk'));
   }
   const found = candidates.find((dir) => existsSync(join(dir, 'mock-host/serve.mjs')));
-  if (!found) throw new CliError('스킬 에디터 SDK(@clack/skill-editor-sdk)를 찾을 수 없습니다. --sdk-dir 또는 CLACK_SKILL_EDITOR_SDK_DIR로 위치를 지정하세요(SDK에서 pnpm build 필요).', 'SKILL_EDITOR_SDK_NOT_FOUND');
+  if (!found) throw new CliError(`스킬 에디터 SDK(@clack/skill-editor-sdk)를 찾을 수 없습니다. ${SDK_LOCATION_HELP}`, 'SKILL_EDITOR_SDK_NOT_FOUND');
   return found;
 }
 

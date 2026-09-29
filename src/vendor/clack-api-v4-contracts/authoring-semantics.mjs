@@ -72,6 +72,59 @@ function inspectEditorSemantics(skill, data, fail) {
   }
 }
 
+/** 콘텐츠 인트로 한도(인트로 계획 _plans/creator-content-intro-plan.md §3.2·§3.9, U2·U3). 서버 `src/lib/creator-content-intro.ts`와 같은 값이다. */
+const INTRO_MAX_IMAGES = 8;
+const INTRO_CREATOR_COMMENT_MAX = 500;
+const INTRO_DESCRIPTION_MAX = 5000;
+/** 인트로 문구로 쓸 수 있는 자유 입력 위젯. 이미지(uuid)·가져오기(content_ref)·선택형 문자열은 쓰지 않는다. */
+const INTRO_TEXT_WIDGETS = new Set(['text', 'textarea']);
+
+/** 자동 구성 라벨(폼 필드 title, 없으면 필드 이름). 서버 `src/lib/skill-intro.ts`의 `skillIntroFieldLabel`과 같은 규칙이다. */
+function introFieldLabel(name, field) {
+  const title = typeof field?.title === 'string' ? field.title.normalize('NFC').trim() : '';
+  return title || name;
+}
+
+/**
+ * 콘텐츠 인트로 출력 선언(`output.intro`, 인트로 계획 §3.9)의 필드 관계.
+ * - images: `output.asset_slots`의 field만. 단일 슬롯은 1장, multiple은 max장으로 세어 합계 8 이하(폼 없이도 검사한다).
+ * - creator_comment·description: 공개(`x-clack-visibility: public`) 자유 입력 문자열 필드, 최대 길이 500·5000 이하.
+ * - description_fallback: 자유 입력 문자열 필드만(공개 범위 무관 — 비공개 설정을 공개하는 유일한 명시 예외).
+ *   자동 구성 최대 길이(필드마다 라벨+줄바꿈+최대 길이, 항목 사이 빈 줄)가 5000자를 넘으면 거부한다.
+ */
+function inspectIntroSemantics(skill, form, slots, fail) {
+  const intro = skill.output?.intro;
+  if (!intro) return;
+  let images = 0;
+  for (const name of intro.images ?? []) {
+    const slot = slots.find((entry) => entry.field === name);
+    if (!slot) { fail('/output/intro/images', '인트로 이미지는 output.asset_slots의 필드만 쓸 수 있습니다.'); continue; }
+    images += slot.multiple ? slot.multiple.max : 1;
+  }
+  if (images > INTRO_MAX_IMAGES) fail('/output/intro/images', `인트로 이미지는 슬롯 최대 장수 합계가 ${INTRO_MAX_IMAGES}장 이하여야 합니다.`);
+  if (!form) return;
+  const properties = form.properties ?? {};
+  const textField = (name) => {
+    const field = Object.hasOwn(properties, name) ? properties[name] : null;
+    return field && field.type === 'string' && INTRO_TEXT_WIDGETS.has(field['x-clack-widget']) && Number.isSafeInteger(field.maxLength) ? field : null;
+  };
+  for (const [key, max] of [['creator_comment', INTRO_CREATOR_COMMENT_MAX], ['description', INTRO_DESCRIPTION_MAX]]) {
+    if (intro[key] === undefined) continue;
+    const field = textField(intro[key]);
+    if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/${key}`, '공개 문자열(text·textarea) 폼 필드를 가리켜야 합니다.');
+    else if (field.maxLength > max) fail(`/output/intro/${key}`, `가리키는 폼 필드의 최대 길이가 ${max}자 이하여야 합니다.`);
+  }
+  const fallback = intro.description_fallback ?? [];
+  let composed = 0;
+  for (const name of fallback) {
+    const field = textField(name);
+    if (!field) { fail('/output/intro/description_fallback', '문자열(text·textarea) 폼 필드만 자동 구성에 쓸 수 있습니다.'); continue; }
+    composed += introFieldLabel(name, field).length + 1 + field.maxLength;
+  }
+  composed += Math.max(0, fallback.length - 1) * 2;
+  if (composed > INTRO_DESCRIPTION_MAX) fail('/output/intro/description_fallback', `자동 구성 최대 길이(라벨 포함)가 ${INTRO_DESCRIPTION_MAX}자를 넘습니다.`);
+}
+
 /**
  * 공개 제작 규격의 필드 간 관계를 서버와 CLI에서 함께 검증한다.
  * 에디터 스킬은 `form` 대신 `data`(output.data.schema를 파싱한 객체)를 세 번째 인자로 넘긴다.
@@ -96,6 +149,7 @@ export function inspectAuthoringSemantics(skill, form, data) {
       paths.add(path);
     }
   }
+  inspectIntroSemantics(skill, form, slots, fail);
   if (!form) return errors;
   const properties = form.properties ?? {};
   const exists = (expression, path) => {

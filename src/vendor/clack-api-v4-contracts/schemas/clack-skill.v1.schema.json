@@ -606,7 +606,8 @@
                 "fixed",
                 "scroll_hide",
                 "translucent_scroll_hide",
-                "floating_close"
+                "floating_close",
+                "floating_close_safe_area"
               ]
             },
             "color_scheme": {
@@ -665,6 +666,45 @@
           "required": [
             "schema"
           ]
+        },
+        "intro": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "콘텐츠 인트로(실행 전 기본 정보 화면) 출력 선언. 모든 키는 선택이다. creator_comment·description은 공개 문자열 폼 필드(최대 길이 500·5000 이하), description_fallback은 description 값이 비었을 때 순서대로 값이 있는 필드만 '{폼 필드 title}\\n{값}'을 빈 줄로 이어 상세 설명을 자동 구성할 문자열 폼 필드다(비공개 필드를 공개하는 유일한 명시 예외, 최대 길이 합과 라벨이 5000자 이하). images는 output.asset_slots의 field이며 슬롯 순서대로 펼친 제작 자산을 쓴다(단일 1장·multiple은 max장으로 세어 합계 8 이하). 폼 스킬 전용이며 에디터 스킬·지침형(instruction) 스킬은 쓸 수 없다.",
+          "properties": {
+            "default_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "creator_comment": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "description": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "description_fallback": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true
+            }
+          }
         }
       },
       "required": [
@@ -951,6 +991,11 @@
                   "required": [
                     "entity_map"
                   ]
+                },
+                {
+                  "required": [
+                    "intro"
+                  ]
                 }
               ]
             }
@@ -977,6 +1022,29 @@
             "required": [
               "editor"
             ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "instruction"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "output": {
+            "not": {
+              "required": [
+                "intro"
+              ]
+            }
           }
         }
       }
