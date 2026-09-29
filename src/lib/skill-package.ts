@@ -7,6 +7,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { unzipSync, zipSync } from 'fflate';
 import { parseDocument } from 'yaml';
 import { CliError } from '../core/errors.js';
+import { computeEditorHash, inspectEditorSkill, type EditorSummary } from './skill-editor.js';
 import skillSchema from '../vendor/clack-api-v4-contracts/schemas/clack-skill.v1.schema.json' with { type: 'json' };
 import formSchema from '../vendor/clack-api-v4-contracts/schemas/authoring-form.v1.schema.json' with { type: 'json' };
 import contentSchema from '../vendor/clack-api-v4-contracts/schemas/clack-content.v1.schema.json' with { type: 'json' };
@@ -27,7 +28,13 @@ export type PreparedSkillPackage = {
   manifest: Manifest;
   file_count: number;
   total_bytes: number;
+  /** 에디터 스킬(authoring.editor)이면 로컬 검사 요약. 최종 판정은 서버 정적 검사(editor-static-v1). */
+  editor?: EditorSummary;
+  warnings?: string[];
+  /** fillEditorHash가 sha256을 채운 매니페스트 바이트(디렉터리 소스에서만). */
+  filled_manifest?: Uint8Array;
 };
+export type PrepareOptions = { fillEditorHash?: boolean };
 
 function invalid(message: string): never { throw new CliError(message, 'SKILL_PACKAGE_INVALID'); }
 function hash(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -85,7 +92,7 @@ async function collectFiles(directory: string): Promise<Record<string, Uint8Arra
   return files;
 }
 
-function inspectZip(bytes: Uint8Array, expectedDirectory?: string): Omit<PreparedSkillPackage, 'bytes' | 'sha256'> {
+function inspectZip(bytes: Uint8Array, expectedDirectory: string | undefined, hashMismatch: 'error' | 'warn'): Omit<PreparedSkillPackage, 'bytes' | 'sha256'> {
   if (!bytes.length || bytes.length > MAX_ZIP) invalid('스킬 ZIP은 비어 있지 않은 10 MiB 이하 파일이어야 합니다.');
   const seen = new Set<string>();
   let entries = 0;
@@ -143,7 +150,13 @@ function inspectZip(bytes: Uint8Array, expectedDirectory?: string): Omit<Prepare
   const authoring = manifest.authoring as Record<string, unknown>;
   const output = manifest.output as Record<string, unknown>;
   for (const reference of authoring.references as string[] | undefined ?? []) file(reference, 64 * 1024);
-  if (manifest.type === 'template' || manifest.type === 'tool') {
+  let editor: ReturnType<typeof inspectEditorSkill> | undefined;
+  if (manifest.type === 'template' && authoring.editor) {
+    editor = inspectEditorSkill(manifest, extracted, { hashMismatch });
+    file(`runtime/${(output.template as Record<string, unknown>).entry}`);
+    const runtime = manifest.runtime as Record<string, unknown>;
+    for (const profile of runtime.profiles as string[]) file(`runtime/.clack/profiles/${profile}.yaml`, 16 * 1024);
+  } else if (manifest.type === 'template' || manifest.type === 'tool') {
     const form = json(file(authoring.form, 64 * 1024), 64 * 1024, '제작 폼');
     if (!validateForm(form)) invalid('제작 폼이 공개 스키마와 일치하지 않습니다.');
     const semanticErrors = inspectAuthoringSemantics(manifest, form);
@@ -166,21 +179,47 @@ function inspectZip(bytes: Uint8Array, expectedDirectory?: string): Omit<Prepare
       invalid('제작 폼과 예시 데이터가 일치하지 않습니다.');
     }
   }
-  return { manifest: manifest as Manifest, file_count: Object.keys(extracted).length, total_bytes: totalBytes };
+  return { manifest: manifest as Manifest, file_count: Object.keys(extracted).length, total_bytes: totalBytes,
+    ...(editor ? { editor: editor.summary, warnings: editor.warnings } : {}) };
 }
 
-export async function prepareSkillPackage(source: string): Promise<PreparedSkillPackage> {
+/** 디렉터리의 에디터 번들 해시를 계산해 매니페스트의 `authoring.editor.sha256`을 채운다. 바뀐 매니페스트 바이트를 돌려준다(변화가 없으면 null). */
+function fillEditorHash(files: Record<string, Uint8Array>): Uint8Array | null {
+  const manifestBytes = files['clack.skill.json'];
+  if (!manifestBytes) return null;
+  let text: string;
+  let manifest: unknown;
+  try { text = textDecoder.decode(manifestBytes); manifest = JSON.parse(text); } catch { return null; }
+  if (!object(manifest)) return null;
+  const computed = computeEditorHash(manifest, files);
+  const editor = object(manifest.authoring) ? manifest.authoring.editor : undefined;
+  if (!computed || !object(editor) || typeof editor.sha256 !== 'string' || editor.sha256 === computed) return null;
+  const declared = editor.sha256;
+  // 원본 서식을 지키려고 선언된 해시 문자열이 한 번만 나올 때만 문자열 치환한다.
+  const next = text.split(declared).length === 2 ? text.replace(declared, computed)
+    : `${JSON.stringify({ ...manifest, authoring: { ...(manifest.authoring as object), editor: { ...editor, sha256: computed } } }, null, 2)}\n`;
+  return new TextEncoder().encode(next);
+}
+
+export async function prepareSkillPackage(source: string, options: PrepareOptions = {}): Promise<PreparedSkillPackage> {
   const path = resolve(source);
   let info;
   try { info = await lstat(path); } catch { return invalid('스킬 디렉터리 또는 ZIP 파일을 읽을 수 없습니다.'); }
   if (info.isSymbolicLink()) invalid('스킬 경로는 심볼릭 링크일 수 없습니다.');
   let bytes: Buffer;
+  let filledManifest: Uint8Array | undefined;
   if (info.isDirectory()) {
     const files = await collectFiles(path);
     if (!Object.keys(files).length) invalid('스킬 디렉터리가 비어 있습니다.');
+    if (options.fillEditorHash) {
+      const filled = fillEditorHash(files);
+      if (filled) { files['clack.skill.json'] = filled; filledManifest = filled; }
+    }
     bytes = Buffer.from(zipSync(files, { level: 6, mtime: new Date(2000, 0, 1) }));
   } else if (info.isFile() && extname(path).toLowerCase() === '.zip') bytes = await readRegular(path);
   else return invalid('스킬 디렉터리 또는 ZIP 파일을 지정하세요.');
-  const inspected = inspectZip(bytes, info.isDirectory() ? basename(path) : undefined);
-  return { bytes, sha256: hash(bytes), ...inspected };
+  // 디렉터리 검사(채우기 전)는 해시 불일치를 경고로만 알린다. pack·push가 값을 채우고, ZIP은 바꿀 수 없어 오류다.
+  const inspected = inspectZip(bytes, info.isDirectory() ? basename(path) : undefined,
+    info.isDirectory() && !options.fillEditorHash ? 'warn' : 'error');
+  return { bytes, sha256: hash(bytes), ...inspected, ...(filledManifest ? { filled_manifest: filledManifest } : {}) };
 }

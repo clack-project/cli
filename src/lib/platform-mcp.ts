@@ -183,7 +183,7 @@ export class PlatformMcpServer {
     }
     if (name === 'platform_skill_push') {
       const { dir, skill_id } = parsePat(patSchemas.skillPush, args, '스킬 업로드 입력');
-      const prepared = await prepareSkillPackage(dir ?? '.');
+      const prepared = await prepareSkillPackage(dir ?? '.', { fillEditorHash: true });
       if (prepared.manifest.type !== 'instruction' && prepared.manifest.type !== 'template') {
         throw new CliError('현재 스킬 업로드는 instruction·template 유형만 지원합니다.', 'SKILL_TYPE_UNSUPPORTED');
       }

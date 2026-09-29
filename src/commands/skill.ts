@@ -1,3 +1,8 @@
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
 import type { Command } from 'commander';
 import { z } from 'zod';
 import { ApiClient, VERSION } from '../core/api.js';
@@ -118,11 +123,11 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
         cursor,
       }, contract });
       if (!Array.isArray(result.data)) throw new CliError('스킬 목록 응답 형식이 올바르지 않습니다.', 'INVALID_RESPONSE', 502);
-      if (!opts.all) { ctx.output(result); return; }
+      if (!opts.all) { ctx.output({ ...result, data: markCenterOnly(result.data) }); return; }
       contract = result.time_contract;
       all.push(...result.data);
       if (!result.pagination?.has_more) {
-        ctx.output({ data: all, time_contract: result.time_contract }); return;
+        ctx.output({ data: markCenterOnly(all), time_contract: result.time_contract }); return;
       }
       const next = result.pagination.next_cursor;
       if (typeof next !== 'string' || !uuid.safeParse(next).success || seen.has(next)) {
@@ -135,7 +140,8 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
   runtime.action(skill.command('get <slug>').description('스킬 상세 조회 (skill:read)'), async (ctx, [value]) => {
     const parsed = skillSlug.safeParse(value);
     if (!parsed.success) throw new CliError('스킬 이름을 확인하세요.');
-    ctx.output(await ctx.api.request('GET', `/v4/skills/${parsed.data}`));
+    const detail = await ctx.api.request('GET', `/v4/skills/${parsed.data}`);
+    ctx.output({ ...detail, data: markCenterOnly(detail.data) });
   });
   runtime.action(skill.command('form <slug> <version>').description('스킬 버전 입력 양식 조회 (skill:read)'), async (ctx, [value, version]) => {
     const parsed = skillSlug.safeParse(value);
@@ -150,16 +156,56 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
   runtime.action(skill.command('validate [dir]').description('스킬 패키지 로컬 검사 (로그인 불필요, --remote는 skill:write)')
     .option('--remote', '서버에서도 패키지를 드라이런 검증 (skill:write)'), async (ctx, [dir], opts) => {
     const prepared = await prepareSkillPackage(dir ?? '.');
+    const local = { local_valid: true, sha256: prepared.sha256, byte_size: prepared.bytes.length,
+      file_count: prepared.file_count, manifest: prepared.manifest, ...editorReport(prepared) };
     if (opts.remote && !ctx.options.dryRun) {
       const remote = await validateSkillRemotely(ctx.api, prepared.bytes);
-      ctx.output({ local_valid: true, sha256: prepared.sha256, byte_size: prepared.bytes.length,
-        file_count: prepared.file_count, manifest: prepared.manifest, remote });
-    } else ctx.output({ local_valid: true, sha256: prepared.sha256, byte_size: prepared.bytes.length,
-      file_count: prepared.file_count, manifest: prepared.manifest, ...(opts.remote ? { remote_skipped: true } : {}) });
+      ctx.output({ ...local, remote });
+    } else ctx.output({ ...local, ...(opts.remote ? { remote_skipped: true } : {}) });
+  });
+  runtime.action(skill.command('pack [dir]').description('스킬 패키지 ZIP 만들기 (로그인 불필요, 에디터 스킬은 authoring.editor.sha256을 채움)')
+    .option('-o, --out <file>', 'ZIP 저장 경로 (기본: <이름>-<버전>.zip)')
+    .option('--write-manifest', '채운 sha256을 디렉터리의 clack.skill.json에도 기록'), async (ctx, [dir], opts) => {
+    const source = dir ?? '.';
+    const prepared = await prepareSkillPackage(source, { fillEditorHash: true });
+    const out = resolve(opts.out ?? `${prepared.manifest.name}-${prepared.manifest.version}.zip`);
+    const writeManifest = Boolean(opts.writeManifest && prepared.filled_manifest);
+    if (!ctx.options.dryRun) {
+      await writeFile(out, prepared.bytes);
+      if (writeManifest) await writeFile(join(resolve(source), 'clack.skill.json'), prepared.filled_manifest!);
+    }
+    ctx.output({ ...(ctx.options.dryRun ? { dry_run: true } : {}), out, sha256: prepared.sha256, byte_size: prepared.bytes.length,
+      file_count: prepared.file_count, slug: prepared.manifest.name, version: prepared.manifest.version,
+      ...(prepared.filled_manifest ? { editor_hash_filled: true, manifest_written: writeManifest && !ctx.options.dryRun } : {}),
+      ...editorReport(prepared) });
+  });
+  const editor = skill.command('editor').description('스킬 에디터(authoring.editor) 개발 도구 — 에디터 스킬은 크리에이터 센터 전용');
+  runtime.action(editor.command('dev').description('로컬 모의 호스트에서 에디터를 띄운다 (http://localhost:5170, 로그인 불필요)')
+    .option('--editor <dir>', '에디터 번들 디렉터리 (기본: SDK 스타터)')
+    .option('--document <file>', '초기 데이터 문서 JSON (기본: SDK 스타터 예시)')
+    .option('--schema <file>', '데이터 스키마 output/data.schema.json (기본: SDK 스타터)')
+    .option('--host-port <port>', '호스트 페이지 포트', '5170').option('--editor-port <port>', '에디터 포트', '5171')
+    .option('--sdk-dir <dir>', '@clack/skill-editor-sdk 위치 (기본: CLACK_SKILL_EDITOR_SDK_DIR, 설치된 패키지, CLACK_MONOREPO_DIR/clack-skill-editor-sdk 순)'),
+  async (ctx, _args, opts) => {
+    const args: string[] = [];
+    for (const [flag, value] of [['editor', opts.editor], ['document', opts.document], ['schema', opts.schema],
+      ['host-port', opts.hostPort], ['editor-port', opts.editorPort]] as const) {
+      if (value === undefined) continue;
+      if ((flag === 'host-port' || flag === 'editor-port') && !/^\d{2,5}$/.test(value)) throw new CliError('포트는 숫자여야 합니다.');
+      args.push(`--${flag}`, flag.endsWith('port') ? value : resolve(value));
+    }
+    const sdkDir = resolveSdkDir(opts.sdkDir);
+    const serve = join(sdkDir, 'mock-host/serve.mjs');
+    if (ctx.options.dryRun) { ctx.output({ dry_run: true, sdk_dir: sdkDir, command: ['node', serve, ...args] }); return; }
+    await new Promise<void>((done, fail) => {
+      const child = spawn(process.execPath, [serve, ...args], { stdio: 'inherit' });
+      child.on('error', () => fail(new CliError('모의 호스트를 실행하지 못했습니다.', 'SKILL_EDITOR_DEV_FAILED')));
+      child.on('exit', (code) => code ? fail(new CliError(`모의 호스트가 종료되었습니다(코드 ${code}). SDK에서 pnpm build를 먼저 실행했는지 확인하세요.`, 'SKILL_EDITOR_DEV_FAILED')) : done());
+    });
   });
   runtime.action(skill.command('push [dir]').description('스킬 패키지 검증 후 새 버전 업로드 (skill:write)')
     .option('--skill-id <id>', '기존 스킬 ID에 새 버전 추가'), async (ctx, [dir], opts) => {
-    const prepared = await prepareSkillPackage(dir ?? '.');
+    const prepared = await prepareSkillPackage(dir ?? '.', { fillEditorHash: true });
     if (prepared.manifest.type !== 'instruction' && prepared.manifest.type !== 'template') {
       throw new CliError('현재 스킬 업로드는 instruction·template 유형만 지원합니다.', 'SKILL_TYPE_UNSUPPORTED');
     }
@@ -233,6 +279,37 @@ export function registerSkillCommands(program: Command, runtime: Runtime): void 
       await ctx.confirm(`${current.version} 버전을 ${selected.data} 범위로 게시할까요?`);
       ctx.output(await ctx.api.request('POST', `${path}/release`, { body }));
     });
+}
+
+/** 서버 목록·상세가 `center_only`/`editor`를 내려주면 사람이 읽는 "센터 전용" 표시를 더한다(에디터 스킬은 CLI·앱에서 제작할 수 없다). */
+function markCenterOnly(value: unknown): unknown {
+  const mark = (item: unknown): unknown => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const row = item as Record<string, unknown>;
+    return row.center_only === true || row.editor === true ? { ...row, center_only: true, availability: '센터 전용' } : row;
+  };
+  return Array.isArray(value) ? value.map(mark) : mark(value);
+}
+
+function editorReport(prepared: PreparedSkillPackage) {
+  if (!prepared.editor) return {};
+  return { editor: prepared.editor, center_only: true, ...(prepared.warnings?.length ? { warnings: prepared.warnings } : {}),
+    notice: '로컬 검사는 구조·한도·해시·데이터 스키마·예시까지입니다. 에디터 코드 정적 검사(editor-static-v1)와 심사는 서버 판정이 최종입니다.' };
+}
+
+/** SDK 위치: --sdk-dir → CLACK_SKILL_EDITOR_SDK_DIR → 설치된 @clack/skill-editor-sdk → CLACK_MONOREPO_DIR/clack-skill-editor-sdk. */
+function resolveSdkDir(option: string | undefined): string {
+  const candidates: string[] = [];
+  // 명시한 --sdk-dir은 다른 후보로 대체하지 않는다(잘못된 경로를 조용히 넘기지 않음).
+  if (option) candidates.push(resolve(option));
+  else {
+    if (process.env.CLACK_SKILL_EDITOR_SDK_DIR) candidates.push(resolve(process.env.CLACK_SKILL_EDITOR_SDK_DIR));
+    try { candidates.push(resolve(createRequire(join(process.cwd(), 'noop.js')).resolve('@clack/skill-editor-sdk/package.json'), '..')); } catch { /* 설치되지 않음 */ }
+    if (process.env.CLACK_MONOREPO_DIR) candidates.push(resolve(process.env.CLACK_MONOREPO_DIR, 'clack-skill-editor-sdk'));
+  }
+  const found = candidates.find((dir) => existsSync(join(dir, 'mock-host/serve.mjs')));
+  if (!found) throw new CliError('스킬 에디터 SDK(@clack/skill-editor-sdk)를 찾을 수 없습니다. --sdk-dir 또는 CLACK_SKILL_EDITOR_SDK_DIR로 위치를 지정하세요(SDK에서 pnpm build 필요).', 'SKILL_EDITOR_SDK_NOT_FOUND');
+  return found;
 }
 
 function skillVersionIds(skillId: string | undefined, versionId: string | undefined) {

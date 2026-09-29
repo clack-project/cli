@@ -1,0 +1,1475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clack.kr/schemas/platform/editor.v1.schema.json",
+  "$comment": "모노레포 clack-api-v4/contracts/platform/schemas/editor.v1.schema.json에서 복사한 파일이다. 이 파일을 직접 수정하지 말고 scripts/sync-vendor-types.mjs로 갱신한다.",
+  "title": "스킬 에디터 호스트 프로토콜(editor.v1) 메시지",
+  "description": "센터 호스트와 스킬 에디터 iframe 사이의 핸드셰이크(window.postMessage)와 MessagePort 메시지. 메서드별 params·result와 이벤트 payload는 $defs에 있고 validators.mjs가 추가로 크기·이진·권한 표기를 검사한다. 원본 규약: _plans/skill-editor-ui-contract.md §7.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/hello"
+    },
+    {
+      "$ref": "#/$defs/welcome"
+    },
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    },
+    {
+      "$ref": "#/$defs/event"
+    }
+  ],
+  "$defs": {
+    "protocol": {
+      "const": "editor.v1"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{16,64}$"
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "pointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[a-z][a-z0-9_]{0,31}|0|[1-9][0-9]{0,5}))+$",
+      "maxLength": 512,
+      "description": "JSON Pointer(RFC 6901) 허용 부분집합(계약 §4-3). 세그먼트는 데이터 키(^[a-z][a-z0-9_]{0,31}$) 또는 배열 인덱스(0 또는 앞자리 0 없는 수)만 쓴다. 이스케이프(~0·~1)·루트(\"\")·배열 끝 \"-\"는 허용하지 않는다. 서버는 같은 세그먼트 규칙을 다시 검사하고 null-prototype 객체에 적용한다."
+    },
+    "appendPointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[a-z][a-z0-9_]{0,31}|0|[1-9][0-9]{0,5}))*/(?:(?:[a-z][a-z0-9_]{0,31}|0|[1-9][0-9]{0,5})|-)$",
+      "maxLength": 512,
+      "description": "pointer와 같되 마지막 세그먼트에 배열 끝 추가 \"-\"를 허용한다(add·move의 path만)."
+    },
+    "locale": {
+      "enum": [
+        "ko",
+        "en"
+      ]
+    },
+    "theme": {
+      "enum": [
+        "light",
+        "dark"
+      ]
+    },
+    "tier": {
+      "enum": [
+        "economy",
+        "performance"
+      ]
+    },
+    "imageMime": {
+      "enum": [
+        "image/png",
+        "image/jpeg",
+        "image/webp"
+      ]
+    },
+    "method": {
+      "enum": [
+        "init",
+        "ready",
+        "ui.setDirty",
+        "ui.openPrivateSettings",
+        "host.reportError",
+        "jobs.get",
+        "document.get",
+        "document.patch",
+        "document.setUiState",
+        "document.validate",
+        "assets.list",
+        "assets.getBytes",
+        "assets.pick",
+        "ai.quote",
+        "ai.suggest",
+        "tools.quote",
+        "tools.image.generate",
+        "preview.open",
+        "package.build"
+      ]
+    },
+    "permission": {
+      "enum": [
+        "document.read",
+        "document.write",
+        "assets.read",
+        "assets.pick",
+        "ai.suggest",
+        "tools.image.generate",
+        "preview",
+        "package"
+      ]
+    },
+    "eventName": {
+      "enum": [
+        "themeChanged",
+        "localeChanged",
+        "saveRequested",
+        "beforeClose",
+        "documentChangedExternally",
+        "jobUpdated"
+      ]
+    },
+    "errorCode": {
+      "enum": [
+        "PERMISSION_DENIED",
+        "METHOD_NOT_FOUND",
+        "BAD_REQUEST",
+        "PAYLOAD_TOO_LARGE",
+        "RATE_LIMITED",
+        "BUSY",
+        "TIMEOUT",
+        "DUPLICATE_REQUEST",
+        "CANCELLED",
+        "REVISION_CONFLICT",
+        "VALIDATION_FAILED",
+        "PATH_NOT_ALLOWED",
+        "NOT_FOUND",
+        "QUOTA_EXCEEDED",
+        "INSUFFICIENT_CASH",
+        "MODERATION_BLOCKED",
+        "UNAVAILABLE",
+        "SAVE_FAILED",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "publicData": {
+      "type": "object",
+      "description": "데이터 문서의 공개 부분. 비공개 최상위 키는 호스트가 제외한다."
+    },
+    "uiState": {
+      "description": "에디터 전용 복구 상태. 호스트·서버는 해석하지 않는 불투명 JSON 값이며 null은 비어 있음을 뜻한다.",
+      "type": [
+        "object",
+        "array",
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ]
+    },
+    "binary": {
+      "description": "와이어에서는 ArrayBuffer(전송 목록으로 이전)다. 골든 픽스처는 {\"$binary\":{\"byte_length\":n}} 자리표시자로 적고 validators.mjs가 따로 검사한다.",
+      "x-clack-binary": "ArrayBuffer"
+    },
+    "patchOp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "add"
+            },
+            "path": {
+              "$ref": "#/$defs/appendPointer"
+            },
+            "value": {
+              "type": [
+                "object",
+                "array",
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "path",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "enum": [
+                "replace",
+                "test"
+              ]
+            },
+            "path": {
+              "$ref": "#/$defs/pointer"
+            },
+            "value": {
+              "type": [
+                "object",
+                "array",
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "path",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "remove"
+            },
+            "path": {
+              "$ref": "#/$defs/pointer"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "move"
+            },
+            "from": {
+              "$ref": "#/$defs/pointer"
+            },
+            "path": {
+              "$ref": "#/$defs/appendPointer"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "path"
+          ]
+        }
+      ],
+      "description": "RFC 6902 부분집합(add·remove·replace·move·test). copy·루트 경로·이스케이프 세그먼트는 허용하지 않는다. \"-\"는 add·move의 path 마지막 세그먼트에만 쓴다."
+    },
+    "documentIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "path",
+        "code",
+        "message"
+      ]
+    },
+    "assetMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "mime": {
+          "$ref": "#/$defs/imageMime"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "enum": [
+            "upload",
+            "tool",
+            "import"
+          ]
+        },
+        "inspection_status": {
+          "enum": [
+            "pending",
+            "passed",
+            "failed"
+          ]
+        },
+        "ai_generated": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "#/$defs/utc"
+        }
+      },
+      "required": [
+        "id",
+        "mime",
+        "bytes",
+        "sha256",
+        "source",
+        "inspection_status",
+        "ai_generated",
+        "created_at"
+      ]
+    },
+    "chargeMode": {
+      "enum": [
+        "cash",
+        "free_quota",
+        "tester_unlimited"
+      ]
+    },
+    "aiQuote": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/pointer"
+        },
+        "tier": {
+          "$ref": "#/$defs/tier"
+        },
+        "price_cash": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "charge_mode": {
+          "$ref": "#/$defs/chargeMode"
+        },
+        "free_remaining_today": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "tier",
+        "price_cash",
+        "charge_mode",
+        "free_remaining_today"
+      ]
+    },
+    "toolQuote": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "const": "image.generate"
+        },
+        "price_cash": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "charge_mode": {
+          "$ref": "#/$defs/chargeMode"
+        },
+        "max_calls": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "used_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining_calls": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tool",
+        "price_cash",
+        "charge_mode",
+        "max_calls",
+        "used_calls",
+        "remaining_calls"
+      ]
+    },
+    "jobAccepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running"
+          ]
+        }
+      },
+      "required": [
+        "job_id",
+        "status"
+      ]
+    },
+    "jobState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "ai.suggest",
+            "tools.image.generate"
+          ]
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/pointer"
+        },
+        "base_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suggestion": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "asset": {
+          "$ref": "#/$defs/assetMeta"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/errorCode"
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "job_id",
+        "kind",
+        "status",
+        "path",
+        "base_revision"
+      ]
+    },
+    "initResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "editor.v1"
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "const": "clack-center"
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ]
+        },
+        "host_methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/method"
+          },
+          "uniqueItems": true
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/permission"
+          },
+          "uniqueItems": true
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "theme": {
+          "$ref": "#/$defs/theme"
+        },
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "editor_version_id": {
+              "$ref": "#/$defs/uuid"
+            },
+            "skill": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "slug": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                },
+                "version": {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "slug",
+                "version",
+                "title"
+              ]
+            }
+          },
+          "required": [
+            "revision",
+            "editor_version_id",
+            "skill"
+          ]
+        },
+        "data_schema": {
+          "type": "object",
+          "description": "심사된 데이터 스키마에서 비공개 최상위 키를 뺀 공개 부분(output-data.v1)."
+        },
+        "data_schema_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "private_keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "filled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "required",
+              "filled"
+            ]
+          },
+          "maxItems": 60
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "request_max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "response_max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "binary_max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "document_max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ui_state_max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rate_window_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rate_max": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_concurrent": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "request_timeout_ms": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "request_max_bytes",
+            "response_max_bytes",
+            "binary_max_bytes",
+            "document_max_bytes",
+            "ui_state_max_bytes",
+            "rate_window_ms",
+            "rate_max",
+            "max_concurrent",
+            "request_timeout_ms"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "host",
+        "host_methods",
+        "permissions",
+        "locale",
+        "theme",
+        "session",
+        "data_schema",
+        "data_schema_hash",
+        "private_keys",
+        "limits"
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/errorCode"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "hello": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clack": {
+          "$ref": "#/$defs/protocol"
+        },
+        "kind": {
+          "const": "hello"
+        },
+        "nonce": {
+          "$ref": "#/$defs/nonce"
+        },
+        "sdk": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9@/._-]{1,64}$"
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ]
+        }
+      },
+      "required": [
+        "clack",
+        "kind",
+        "nonce",
+        "sdk"
+      ],
+      "description": "에디터 → 호스트, window.postMessage(대상 출처 = clack-parent). iframe 로드 1회에 한 번만 유효하다."
+    },
+    "welcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clack": {
+          "$ref": "#/$defs/protocol"
+        },
+        "kind": {
+          "const": "welcome"
+        },
+        "nonce": {
+          "$ref": "#/$defs/nonce"
+        },
+        "protocol_version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "clack",
+        "kind",
+        "nonce",
+        "protocol_version"
+      ],
+      "description": "호스트 → 에디터, window.postMessage(대상 출처 = 에디터 버전 출처). event.ports[0]에 MessagePort 1개를 이전한다."
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clack": {
+          "$ref": "#/$defs/protocol"
+        },
+        "kind": {
+          "const": "request"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "clack",
+        "kind",
+        "id",
+        "method"
+      ],
+      "description": "에디터 → 호스트, MessagePort. params는 메서드별 $defs/{메서드}Params로 검사한다(없으면 {}로 본다). x-clack-host-sheet 메서드는 호스트 시트 규칙(한 번에 1개·확정 지연·연속 취소 억제)을 따른다."
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clack": {
+              "$ref": "#/$defs/protocol"
+            },
+            "kind": {
+              "const": "response"
+            },
+            "id": {
+              "$ref": "#/$defs/requestId"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "clack",
+            "kind",
+            "id",
+            "ok",
+            "result"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clack": {
+              "$ref": "#/$defs/protocol"
+            },
+            "kind": {
+              "const": "response"
+            },
+            "id": {
+              "$ref": "#/$defs/requestId"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          },
+          "required": [
+            "clack",
+            "kind",
+            "id",
+            "ok",
+            "error"
+          ]
+        }
+      ],
+      "description": "호스트 → 에디터, MessagePort. result는 메서드별 $defs/{메서드}Result로 검사한다. 호스트는 송신 전에 반드시 검사하고(validateEditorResult) 통과하지 못하면 INTERNAL_ERROR로 응답한다."
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clack": {
+          "$ref": "#/$defs/protocol"
+        },
+        "kind": {
+          "const": "event"
+        },
+        "event": {
+          "$ref": "#/$defs/eventName"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "clack",
+        "kind",
+        "event",
+        "seq",
+        "payload"
+      ],
+      "description": "호스트 → 에디터, MessagePort. payload는 $defs/{이벤트}Payload로 검사한다. 호스트는 송신 전에 반드시 검사하고(validateEditorEvent) 통과하지 못하면 보내지 않는다."
+    },
+    "initParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": null
+    },
+    "readyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": null
+    },
+    "readyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "uiSetDirtyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dirty": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dirty"
+      ],
+      "x-clack-permission": null
+    },
+    "uiSetDirtyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "uiOpenPrivateSettingsParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": null,
+      "x-clack-host-sheet": true
+    },
+    "uiOpenPrivateSettingsResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "changed": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "changed",
+        "revision"
+      ]
+    },
+    "hostReportErrorParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "운영 오류 보고(계약 §7-4, M10 확정). 오류 문구(message)·스택 원문은 보내지 않는다. 호스트는 code와 에디터 버전 ID(호스트가 부착), location만 CLACK 운영 관측에 적재하고 제작자에게 주지 않는다.",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        },
+        "location": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]{1,128}:[1-9][0-9]{0,6}$",
+          "maxLength": 136,
+          "description": "번들 기준 상대 경로와 줄 번호(예: app.js:42). 출처·로드 토큰 경로·쿼리·열 번호는 뺀다."
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "x-clack-permission": null
+    },
+    "hostReportErrorResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "jobsGetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "x-clack-permission": null
+    },
+    "jobsGetResult": {
+      "$ref": "#/$defs/jobState"
+    },
+    "documentGetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": "document.read"
+    },
+    "documentGetResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "data": {
+          "$ref": "#/$defs/publicData"
+        },
+        "ui_state": {
+          "$ref": "#/$defs/uiState"
+        },
+        "bytes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ui_state": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "data",
+            "ui_state"
+          ]
+        }
+      },
+      "required": [
+        "revision",
+        "data",
+        "ui_state",
+        "bytes"
+      ]
+    },
+    "documentPatchParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/patchOp"
+          },
+          "minItems": 1,
+          "maxItems": 500
+        }
+      },
+      "required": [
+        "revision",
+        "ops"
+      ],
+      "x-clack-permission": "document.write"
+    },
+    "documentPatchResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision",
+        "bytes"
+      ]
+    },
+    "documentSetUiStateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ui_state": {
+          "$ref": "#/$defs/uiState"
+        }
+      },
+      "required": [
+        "ui_state"
+      ],
+      "x-clack-permission": "document.write"
+    },
+    "documentSetUiStateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "updated_at": {
+          "$ref": "#/$defs/utc"
+        }
+      },
+      "required": [
+        "updated_at"
+      ]
+    },
+    "documentValidateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": "document.write"
+    },
+    "documentValidateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/documentIssue"
+          },
+          "maxItems": 200
+        },
+        "private_incomplete": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "valid",
+        "revision",
+        "errors",
+        "private_incomplete"
+      ]
+    },
+    "assetsListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": "assets.read"
+    },
+    "assetsListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assetMeta"
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "assets"
+      ]
+    },
+    "assetsGetBytesParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "required": [
+        "asset_id"
+      ],
+      "x-clack-permission": "assets.read"
+    },
+    "assetsGetBytesResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "mime": {
+          "$ref": "#/$defs/imageMime"
+        },
+        "bytes": {
+          "$ref": "#/$defs/binary"
+        }
+      },
+      "required": [
+        "asset_id",
+        "mime",
+        "bytes"
+      ]
+    },
+    "assetsPickParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "data_path": {
+          "$ref": "#/$defs/pointer"
+        },
+        "accept": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/imageMime"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "x-clack-permission": "assets.pick",
+      "x-clack-host-sheet": true
+    },
+    "assetsPickResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/assetMeta"
+        }
+      },
+      "required": [
+        "asset"
+      ]
+    },
+    "aiQuoteParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/pointer"
+        },
+        "tier": {
+          "$ref": "#/$defs/tier"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "x-clack-permission": "ai.suggest"
+    },
+    "aiQuoteResult": {
+      "$ref": "#/$defs/aiQuote"
+    },
+    "aiSuggestParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/pointer"
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "tier": {
+          "$ref": "#/$defs/tier"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "x-clack-permission": "ai.suggest",
+      "x-clack-host-sheet": true
+    },
+    "aiSuggestResult": {
+      "$ref": "#/$defs/jobAccepted"
+    },
+    "toolsQuoteParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "const": "image.generate"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "x-clack-permission": "tools.image.generate"
+    },
+    "toolsQuoteResult": {
+      "$ref": "#/$defs/toolQuote"
+    },
+    "toolsImageGenerateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "data_path": {
+          "$ref": "#/$defs/pointer"
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "data_path"
+      ],
+      "x-clack-permission": "tools.image.generate",
+      "x-clack-host-sheet": true
+    },
+    "toolsImageGenerateResult": {
+      "$ref": "#/$defs/jobAccepted"
+    },
+    "previewOpenParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": "preview",
+      "x-clack-host-sheet": true
+    },
+    "previewOpenResult": {
+      "description": "v1 미리보기(계약 §5·§7-4): 호스트가 공개 데이터 확인 시트 → 패키징 → 기존 앱 미리보기 딥링크/QR 시트를 띄운다. shown은 QR 시트를 띄운 시점, cancelled는 확인 시트 취소 또는 에디터발 시트 억제.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "shown"
+            },
+            "version_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        }
+      ]
+    },
+    "packageBuildParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "x-clack-permission": "package",
+      "x-clack-host-sheet": true
+    },
+    "packageBuildResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "content_id",
+        "version_id",
+        "revision"
+      ]
+    },
+    "themeChangedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "theme": {
+          "$ref": "#/$defs/theme"
+        }
+      },
+      "required": [
+        "theme"
+      ]
+    },
+    "localeChangedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locale": {
+          "$ref": "#/$defs/locale"
+        }
+      },
+      "required": [
+        "locale"
+      ]
+    },
+    "saveRequestedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "interval",
+            "navigation",
+            "visibility",
+            "preview",
+            "package"
+          ]
+        },
+        "deadline_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "reason",
+        "deadline_ms"
+      ]
+    },
+    "beforeClosePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deadline_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "deadline_ms"
+      ]
+    },
+    "documentChangedExternallyPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "enum": [
+            "other_session",
+            "private_settings",
+            "asset"
+          ]
+        }
+      },
+      "required": [
+        "revision",
+        "reason"
+      ]
+    },
+    "jobUpdatedPayload": {
+      "$ref": "#/$defs/jobState"
+    }
+  }
+}

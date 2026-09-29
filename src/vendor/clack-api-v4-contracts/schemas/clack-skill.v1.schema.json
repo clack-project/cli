@@ -287,6 +287,64 @@
             "permissions",
             "purpose"
           ]
+        },
+        "editor": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "스킬 에디터(전체 화면 제작 UI) 선언. v1은 template 스킬 전용이며 제작 폼·플러그인 패널과 함께 쓸 수 없다. 번들 규칙(디렉터리면 {bundle}/index.html 진입, sha256 계산법)은 authoring.plugin과 같다.",
+          "properties": {
+            "bundle": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "permissions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "document.read",
+                  "document.write",
+                  "assets.read",
+                  "assets.pick",
+                  "ai.suggest",
+                  "tools.image.generate",
+                  "preview",
+                  "package"
+                ]
+              },
+              "minItems": 2,
+              "uniqueItems": true
+            },
+            "purpose": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ko": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "en": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "ko"
+              ]
+            }
+          },
+          "required": [
+            "bundle",
+            "sha256",
+            "permissions",
+            "purpose"
+          ]
         }
       },
       "required": [
@@ -563,6 +621,50 @@
             "header_mode",
             "color_scheme"
           ]
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "스킬 에디터가 만드는 데이터 문서 선언. schema 파일은 output-data.v1 규칙을 따른다. 번들에는 공개 부분이 data/document.json, 비공개 최상위 키가 .clack/config.private.json, 자산이 data/assets/로 들어간다.",
+          "properties": {
+            "schema": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 262144
+            },
+            "private_max_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "assets": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "max_count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 48
+                },
+                "max_total_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 25165824
+                }
+              },
+              "required": [
+                "max_count",
+                "max_total_bytes"
+              ]
+            }
+          },
+          "required": [
+            "schema"
+          ]
         }
       },
       "required": [
@@ -705,8 +807,27 @@
         ],
         "properties": {
           "authoring": {
-            "required": [
-              "form"
+            "oneOf": [
+              {
+                "required": [
+                  "form"
+                ],
+                "not": {
+                  "required": [
+                    "editor"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "editor"
+                ],
+                "not": {
+                  "required": [
+                    "form"
+                  ]
+                }
+              }
             ],
             "properties": {
               "modes": {
@@ -756,6 +877,108 @@
         "required": [
           "runtime"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authoring": {
+            "required": [
+              "editor"
+            ]
+          }
+        },
+        "required": [
+          "authoring"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "template"
+          },
+          "authoring": {
+            "properties": {
+              "surfaces": {
+                "items": {
+                  "const": "center"
+                },
+                "maxItems": 1
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "form"
+                  ]
+                },
+                {
+                  "required": [
+                    "plugin"
+                  ]
+                }
+              ]
+            }
+          },
+          "output": {
+            "required": [
+              "data"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "asset_slots"
+                  ]
+                },
+                {
+                  "required": [
+                    "derive"
+                  ]
+                },
+                {
+                  "required": [
+                    "profile_select"
+                  ]
+                },
+                {
+                  "required": [
+                    "entity"
+                  ]
+                },
+                {
+                  "required": [
+                    "entity_map"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "output": {
+            "required": [
+              "data"
+            ]
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authoring": {
+            "required": [
+              "editor"
+            ]
+          }
+        }
       }
     }
   ]
