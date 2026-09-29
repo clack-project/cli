@@ -3,7 +3,7 @@
 /** HTML 파일과 함께 심사·고정되는 네이티브 표시 계약. */
 export interface ContentPresentation {
   schema_version: 1;
-  header_mode: 'fixed' | 'scroll_hide' | 'translucent_scroll_hide' | 'floating_close';
+  header_mode: 'fixed' | 'scroll_hide' | 'translucent_scroll_hide' | 'floating_close' | 'floating_close_safe_area';
   color_scheme: 'light' | 'dark';
 }
 

@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clack.kr/schemas/platform/output-data.v1.schema.json",
+  "$comment": "모노레포 clack-api-v4/contracts/platform/schemas/output-data.v1.schema.json에서 복사한 파일이다. 이 파일을 직접 수정하지 말고 scripts/sync-vendor-types.mjs로 갱신한다.",
+  "title": "스킬 에디터 데이터 문서 스키마 규칙(output-data.v1)",
+  "description": "스킬 매니페스트 output.data.schema가 가리키는 데이터 문서 스키마 파일이 따라야 하는 메타 규칙이다. v1은 pattern을 허용하지 않고(백트래킹 비용), uniqueItems는 스칼라 배열에만 쓴다. 깊이 6·문자열 maxLength 필수·배열 maxItems 필수·판별자 oneOf·로컬 $ref만·순환 금지·비공개는 최상위 키만·uniqueItems 대상처럼 같은 스키마로 표현할 수 없는 규칙은 validators.mjs의 inspectOutputData가 추가로 검사한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "type": {
+      "const": "object"
+    },
+    "additionalProperties": {
+      "const": false
+    },
+    "properties": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rootField"
+      },
+      "minProperties": 1,
+      "maxProperties": 60
+    },
+    "required": {
+      "$ref": "#/$defs/keyList"
+    },
+    "$defs": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/node"
+      },
+      "maxProperties": 64
+    }
+  },
+  "required": [
+    "type",
+    "properties",
+    "additionalProperties"
+  ],
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+    },
+    "keyList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/key"
+      },
+      "uniqueItems": true
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ko": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "en": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "ko"
+      ]
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accept": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304
+        },
+        "aspect": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"
+        },
+        "generate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "accept",
+        "max_bytes"
+      ]
+    },
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "suggest": {
+          "type": "boolean"
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "suggest"
+      ]
+    },
+    "scalar": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "nodeKeywords": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "object",
+            "array",
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "x-clack-i18n": {
+          "$ref": "#/$defs/label"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scalar"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "const": {
+          "$ref": "#/$defs/scalar"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "format": {
+          "const": "uuid"
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "uniqueItems": {
+          "type": "boolean",
+          "description": "스칼라(string·integer·number·boolean) items 배열에만 쓴다(validators.mjs 검사)."
+        },
+        "items": {
+          "$ref": "#/$defs/node"
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/key"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/node"
+          },
+          "maxProperties": 60
+        },
+        "required": {
+          "$ref": "#/$defs/keyList"
+        },
+        "additionalProperties": {
+          "const": false
+        },
+        "$ref": {
+          "type": "string",
+          "pattern": "^#/\\$defs/[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "oneOf": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          },
+          "minItems": 2,
+          "maxItems": 16
+        },
+        "x-clack-discriminator": {
+          "$ref": "#/$defs/key"
+        },
+        "x-clack-asset": {
+          "$ref": "#/$defs/asset"
+        },
+        "x-clack-ai": {
+          "$ref": "#/$defs/ai"
+        }
+      }
+    },
+    "node": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nodeKeywords"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "rootField": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nodeKeywords"
+        }
+      ],
+      "properties": {
+        "x-clack-visibility": {
+          "type": "string",
+          "enum": [
+            "public",
+            "private"
+          ]
+        }
+      },
+      "required": [
+        "x-clack-visibility"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

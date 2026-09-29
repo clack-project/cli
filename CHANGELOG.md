@@ -1,5 +1,14 @@
 # 변경 이력
 
+## 0.2.0
+
+- 스킬 에디터(`authoring.editor`) 스킬을 로컬에서 검사한다. `skill validate`·`skill pack`·`skill push`가 에디터 번들 구조·한도(파일 50개·파일 512 KiB·전체 2 MiB·코드 512 KiB)·번들 해시, 데이터 스키마(`output-data.v1`)·예시 문서를 서버와 같은 공유 계약으로 판정하고, 지연 로드 의심(`loading="lazy"`·동적 `import()`·CSS `url()`)은 경고로 알린다. 에디터 코드 정적 검사(`editor-static-v1`)와 심사는 서버 판정이 최종이다.
+- `skill pack`이 ZIP을 만들면서 `authoring.editor.sha256`을 번들 해시로 채운다. `--write-manifest`로 채운 값을 `clack.skill.json`에도 기록한다. `skill push`도 같은 값을 채워 올린다.
+- `skill editor dev`를 추가했다. 스킬 에디터 SDK의 모의 호스트로 로컬에서 에디터를 열어 본다(로그인 불필요). SDK는 아직 npm에 공개되지 않아 `--sdk-dir`·`CLACK_SKILL_EDITOR_SDK_DIR`·`CLACK_MONOREPO_DIR`로 빌드한 SDK 위치를 지정한다(`--help`와 README에 안내).
+- `skill list`·`skill get`이 에디터 스킬에 `availability: "센터 전용"`을 표시한다. 에디터 스킬은 v1에서 크리에이터 센터에서만 제작할 수 있다.
+- 공유 제작 계약 사본을 최신으로 맞췄다. 스킬 패키지 검사가 콘텐츠 인트로 출력 선언(`output.intro`)을 인식·검사한다.
+- 헤더 표시에 `floating_close_safe_area`(전체 화면, 안전 영역 안쪽)를 추가했다. `content upload`·`page upload`·`page presentation`의 `--header`와 스킬 매니페스트 검사에서 쓸 수 있다.
+
 ## 0.1.1
 
 - 승인 대기 중 프로세스가 끝나도 발급한 로그인 요청을 저장해 두어(0600) `clack login --resume`으로 이어받을 수 있다. `clack login --no-wait`로 코드만 발급하고 바로 반환하는 모드도 추가했다. 만료·거부·이미 교부된 요청은 명확한 오류 코드로 처리하고 자동으로 새 요청을 만들지 않는다.

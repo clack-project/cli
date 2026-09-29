@@ -65,7 +65,7 @@ clack login --resume --env dev   # 발급 당시와 같은 환경이어야 한�
 | 설정 | `config get`, `config set <키> <값>` |
 | HTML 콘텐츠 | `content config/list/status/create/upload/complete/preview/submit/withdraw/publish/unpublish` |
 | 에이전트 연결 | `mcp config`, `skills` |
-| 스킬 패키지·관리 | `skill validate`, `skill push`, `skill complete`, `skill submit`, `skill list`, `skill get`, `skill form`, `skill status`, `skill cancel`, `skill release`, `skill deprecate` |
+| 스킬 패키지·관리 | `skill validate`, `skill pack`, `skill editor dev`, `skill push`, `skill complete`, `skill submit`, `skill list`, `skill get`, `skill form`, `skill status`, `skill cancel`, `skill release`, `skill deprecate` |
 | 콘텐츠 서버 키(platform:read/write) | `content server-keys list/revoke` (발급·회전은 크리에이터 센터 전용) |
 | 공유 문서 관리(platform:read/write) | `content shared collections/list/get/hide/delete` |
 | 플랫폼 서버 키 데이터 | `platform usage`, `platform data get`, `platform data list`, `platform data leaderboard`, `platform data put`, `platform data patch`, `platform data delete` |
@@ -232,6 +232,23 @@ clack skill deprecate <스킬-UUID> --env dev
 - 로드 토큰: iframe 주소의 실행 토큰은 300초 동안 유효하고 번들 안 상대 경로 자원도 같은 토큰으로 검사합니다. 센터는 만료 30초 전에 새 토큰으로 플러그인을 다시 엽니다. 필요한 자원은 첫 로드 때 불러오고, 상태는 `setFormValues`로 저장한 뒤 다시 열렸을 때 `getFormValues`로 이어 갑니다.
 - 심사: 업로드는 구조 오류만 422 `SKILL_PLUGIN_INVALID`로 거부하고, 코드 판정은 줄 번호와 함께 심사 근거로 남깁니다. 관리자가 번들 소스를 직접 확인한 뒤 승인하며 플러그인과 결과 콘텐츠는 자동 공개되지 않습니다. 이전 규칙(v1)으로 검사된 대기 플러그인은 승인할 수 없으니(409 `PLUGIN_STATIC_CHECK_STALE`) 새 버전으로 다시 올립니다.
 
+
+## 스킬 에디터(`authoring.editor`) 개발
+
+스킬이 전체 화면 제작 UI(에디터)를 제공하는 스킬입니다. v1은 크리에이터 센터에서만 쓸 수 있어 `skill list`·`skill get` 결과에 `availability: "센터 전용"`으로 표시됩니다(서버가 `center_only`·`editor`를 내려줄 때).
+
+- `clack skill validate [dir]`: 에디터 번들 구조·한도(파일 50개·파일 512 KiB·전체 2 MiB·코드 512 KiB)·번들 해시, `output.data` 스키마(`output-data.v1`: `pattern` 금지, `uniqueItems`는 스칼라 배열만), 예시 문서를 로컬에서 검사합니다. 지연 로드 의심(`loading="lazy"`·동적 `import()`·CSS `url()`)은 경고로만 알립니다. 에디터 코드의 구문 트리 정적 검사(`editor-static-v1`)와 심사는 서버 판정이 최종입니다.
+- `clack skill pack [dir] [-o out.zip] [--write-manifest]`: ZIP을 만들면서 `authoring.editor.sha256`을 번들 해시로 채웁니다. `--write-manifest`는 채운 값을 디렉터리의 `clack.skill.json`에도 기록합니다. `skill push`도 같은 값을 채워 올립니다.
+- `clack skill editor dev [--editor <dir>] [--document <json>] [--schema <json>]`: SDK의 모의 호스트로 `http://localhost:5170`에서 에디터를 열어 봅니다(로그인 불필요). SDK(`@clack/skill-editor-sdk`)는 `--sdk-dir`, `CLACK_SKILL_EDITOR_SDK_DIR`, 현재 디렉터리에서 설치된 패키지, `CLACK_MONOREPO_DIR/clack-skill-editor-sdk` 순서로 찾으며, SDK에서 `pnpm build`를 먼저 실행해야 합니다.
+
+스킬 에디터 SDK는 아직 npm에 공개되지 않았고 CLI 패키지에도 들어 있지 않습니다. SDK 소스 디렉터리(클랙 내부 작업자는 내부 저장소 체크아웃의 `clack-skill-editor-sdk`)에서 한 번 빌드한 뒤 그 위치를 알려 줍니다.
+
+```sh
+cd <내부 저장소>/clack-skill-editor-sdk && pnpm install && pnpm build
+clack skill editor dev --sdk-dir <내부 저장소>/clack-skill-editor-sdk --editor ./editor --schema ./output/data.schema.json --document ./examples/basic.json
+# 또는 CLACK_MONOREPO_DIR=<내부 저장소> clack skill editor dev ...
+```
+
 ## 플랫폼 전용 PAT 도구(서버 키·공유 문서·콘텐츠 공개)
 
 `platform:read`·`platform:write` 스코프의 개인 액세스 토큰(PAT)으로 내 콘텐츠의 서버 키(`csk_`)를 조회·폐기하고, 이용자가 쓴 공유(shared) 문서를 조회·숨김·삭제합니다. `platform:read`는 조회, `platform:write`는 폐기·숨김·삭제입니다. 서버 키 발급·회전은 PAT보다 오래 사는 비밀값을 만들므로 크리에이터 센터 로그인 세션에서만 할 수 있고, `content server-keys issue`·`rotate`는 센터 안내만 출력합니다. 서버 키 원문은 센터의 발급·회전 응답에만 한 번 담깁니다.
@@ -307,7 +324,7 @@ clack page restore PAGE_ID PREVIOUS_VERSION_ID --revision 1
 clack page disable PAGE_ID --revision 2
 ```
 
-헤더는 `fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close` 중 선택한다. 파일과 헤더를 한 버전으로 저장하므로 헤더만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
+헤더는 `fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close`(전체 화면, 화면 끝까지), `floating_close_safe_area`(전체 화면, 안전 영역 안쪽) 중 선택한다. 파일과 헤더를 한 버전으로 저장하므로 헤더만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
 
 페이지 파일은 유지하고 헤더만 바꾸려면 `clack page presentation PAGE_ID VERSION_ID --header scroll_hide --color light`를 사용합니다. 새 비공개 버전이 만들어지며 응답의 새 버전 ID로 앱 확인과 심사를 다시 진행합니다. 기존 적용본은 유지됩니다.
 

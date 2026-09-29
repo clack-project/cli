@@ -78,7 +78,7 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     await mutate(ctx, 'POST', '/v4/creator/contents', body);
   });
   runtime.action(content.command('upload <id> <file>').description('HTML/ZIP 업로드로 새 비공개 버전 생성 (creator-content:write)')
-    .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close']))
+    .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']))
     .addOption(new Option('--color <scheme>', '헤더 색상').choices(['light', 'dark'])), async (ctx, [id, file], opts) => {
     const path = `/v4/creator/contents/${uuid(id)}`;
     const prepared = await prepareContentFile(file!);
