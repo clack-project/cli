@@ -29,7 +29,7 @@ const localizedEntry = z.object({
   description: z.string().trim().max(2000).optional(),
 }).strict();
 export const updateSchema = z.object({
-  title: z.string().trim().min(1).max(120).optional(),
+  title: z.string().trim().max(120).optional(),
   description: z.string().trim().max(2000).optional(),
   kind: z.enum(['html', 'gallery', 'slideshow', 'video']).optional(),
   thumbnail_id: z.uuid().nullable().optional(),
@@ -45,7 +45,9 @@ export const updateSchema = z.object({
     for (const raw of value.tags) {
       const tag = raw.trim().replace(/^#+/, '').trim().normalize('NFC');
       if (!TAG_PATTERN.test(tag)) issue('해시태그는 글자·숫자·밑줄(_)만 사용해 1~30자로 입력하세요.');
-      seen.add(tag.normalize('NFKC').toLowerCase());
+      const key = tag.normalize('NFKC').toLowerCase();
+      if (key.length > 40) issue('해시태그가 너무 깁니다. 더 짧게 입력하세요.');
+      seen.add(key);
     }
     if (seen.size > 10) issue('해시태그는 최대 10개까지 등록할 수 있습니다.');
   }
@@ -65,7 +67,7 @@ export const updateSchema = z.object({
 /** JSON 옵션 값을 읽는다. `none`은 null(해제)이다. */
 function jsonOption(name: string, value: string): unknown {
   if (value === 'none') return null;
-  try { return JSON.parse(value); } catch { throw new CliError(`${name}은 JSON 객체이거나 none이어야 합니다.`); }
+  try { return JSON.parse(value); } catch { throw new CliError(`${name} 값은 JSON 객체이거나 none이어야 합니다.`); }
 }
 
 export async function prepareContentFile(source: string) {
@@ -128,9 +130,9 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     await mutate(ctx, 'POST', '/v4/creator/contents', body);
   });
   runtime.action(content.command('update <id>').description('콘텐츠 정보(제목·설명·종류·썸네일·메타데이터·태그) 수정 (creator-content:write)')
-    .option('--title <text>', '제목 (1~120자)').option('--description <text>', '설명 (2000자 이하)')
+    .option('--title <text>', '제목 (120자 이하, 빈 값이면 제목 없음)').option('--description <text>', '설명 (2000자 이하)')
     .addOption(new Option('--kind <kind>', '콘텐츠 종류').choices(['html', 'gallery', 'slideshow', 'video']))
-    .option('--thumbnail-id <uuid|none>', '썸네일 ID, none이면 기본 이미지로 되돌림')
+    .option('--thumbnail-id <uuid|none>', '썸네일 작업 ID, none이면 기본 이미지로 되돌림')
     .addOption(new Option('--metadata-mode <mode>', '메타데이터 입력 방식').choices(['single', 'localized']))
     .option('--metadata-lang <ko|en|none>', '대표 언어')
     .option('--localized-metadata <json|none>', '대표 언어 외 언어별 제목·설명 JSON, 예: \'{"en":{"title":"Title","description":"About"}}\'')

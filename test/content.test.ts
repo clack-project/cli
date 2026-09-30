@@ -191,11 +191,13 @@ test('content update·info-version은 PATCH·POST 경로와 서버 본문 규칙
   await run('content', 'update', contentId, '--metadata-mode', 'localized', '--metadata-lang', 'ko',
     '--localized-metadata', '{"en":{"title":"Title","description":"About"}}');
   await run('content', 'update', contentId, '--tags', '');
+  await run('content', 'update', contentId, '--title', '  ');
   await run('content', 'info-version', contentId, versionId);
   assert.deepEqual(calls, [
     { call: `PATCH ${root}`, body: { title: '새 제목', description: '', thumbnail_id: null, tags: ['#여행', 'travel'] } },
     { call: `PATCH ${root}`, body: { metadata_mode: 'localized', metadata_lang: 'ko', localized_metadata: { en: { title: 'Title', description: 'About' } } } },
     { call: `PATCH ${root}`, body: { tags: [] } },
+    { call: `PATCH ${root}`, body: { title: '' } },
     { call: `POST ${root}/versions/${versionId}/info-version`, body: undefined },
   ]);
   assert.equal(confirmations.length, 1);
@@ -208,6 +210,7 @@ test('content update·info-version은 PATCH·POST 경로와 서버 본문 규칙
   await assert.rejects(run('content', 'update', contentId, '--metadata-mode', 'localized', '--metadata-lang', 'ko', '--localized-metadata', '{"ko":{"title":"a"}}'));
   await assert.rejects(run('content', 'update', contentId, '--localized-metadata', '{깨짐'));
   await assert.rejects(run('content', 'update', contentId, '--tags', 'a-b'));
+  await assert.rejects(run('content', 'update', contentId, '--tags', 'ǆ'.repeat(30)));
   await assert.rejects(run('content', 'update', contentId, '--tags', Array.from({ length: 11 }, (_, i) => `t${i}`).join(',')));
   await assert.rejects(run('content', 'info-version', 'not-uuid', versionId));
   assert.equal(calls.length, before);
