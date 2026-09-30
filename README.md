@@ -357,6 +357,8 @@ clack page status PAGE_ID
 - 업로드: `{"action":"upload","session_id":"UUID","field":"plates","item_index":0,"file":"./portrait.png"}`. 응답 자산 ID를 `plates[0].asset_id`로 저장한다.
 - 견적: `{"action":"quote","session_id":"UUID"}`. 생성은 `action:"image"` 또는 `"image-batch"`, `form_revision`·`asset_slot`·`approved_price_cash`·`idempotency_key`와 `item_index` 또는 `item_indexes`를 보낸다. 같은 요청의 재시도에는 같은 키를 사용한다.
 - 가져오기: `{"action":"import","session_id":"UUID","field":"portrait_source","content_id":"UUID","revision":0}`. 본인 콘텐츠에서 매니페스트가 내보내도록 선언한 값만 복사한다.
+- 종료(CLI 0.3.1 이상): `clack authoring complete <세션-UUID> --env dev` 또는 `clack authoring abandon <세션-UUID> --env dev --yes`. JSON 입력은 `{"action":"complete","session_id":"UUID"}`·`{"action":"abandon","session_id":"UUID"}`이며 포기는 비대화형에서 `--yes`가 필요하다. 로컬 MCP는 같은 action을 사용하고 abandon에 `confirm:true`를 지정한다.
+- 완료·포기는 폼(template) 세션만 PAT로 가능하다. 에디터·지침형 스킬의 생성·종료는 403 `SESSION_REQUIRED`이므로 센터에서 작업한다. 본인 세션이 없으면 404 `AUTHORING_NOT_FOUND`다. complete는 현재 revision을 package한 뒤 가능하며(409 `AUTHORING_NOT_PACKAGED`), 종료 재호출은 409 `AUTHORING_SESSION_LOCKED`다. 종료 응답의 `data.status`를 확인한다. 포기해도 기존 콘텐츠는 유지되며 게시·심사는 별도다. 응답 유실 때는 get으로 상태를 조회하고 변경 요청을 자동 재시도하지 않는다.
 - AI 채우기는 `fill-quote` → `fill` → `fill-status`, 자산 목록은 `assets`, 이미지 작업 조회는 `tool`, 폼 검증은 `validate`를 사용한다.
 
 `image_list` 값은 `[{"asset_id":"UUID","scene":"장면","pose":"구도","mood":"분위기","aspect":"1:1"}]`이며 한 번에 최대 8장, 콘텐츠당 최대 24장을 사용한다. 스킬의 `max_calls`와 플랫폼 설정 중 작은 한도를 적용한다. 참조 이미지 생성은 공급자 검증 전 비활성이며 현재 외모·화풍·팔레트 텍스트로 동일성을 안내한다.

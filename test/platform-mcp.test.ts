@@ -221,3 +221,26 @@ test('stdio는 줄바꿈 JSON-RPC 프레이밍을 사용하고 stdout에 프로�
   assert.equal(frames[2].result.isError, true);
   assert.ok(!result.stdout.includes(env.CLACK_TOKEN));
 });
+
+test('MCP 세션 종료 스키마: 포기 미리보기·확인·검증과 완료의 서버 조건 유지', async () => {
+  const calls: unknown[] = [];
+  const server = new PlatformMcpServer({ baseUrl: 'https://v4-api.dev.clack.kr', fetch: (async (input, options) => {
+    assert.equal(new URL(String(input)).pathname, '/v4/creator/authoring-sessions/00000000-0000-4000-8000-000000000001/complete');
+    calls.push(JSON.parse(String(options?.body)));
+    return new Response(JSON.stringify({ data: { status: 'abandoned' } }),
+      { headers: { 'X-CLACK-Time-Contract': 'utc-v1' } });
+  }) as typeof fetch }, { CLACK_TOKEN: pat });
+  await server.handle(init);
+  await server.handle({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  const invoke = (args: unknown) => server.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'platform_authoring', arguments: args } });
+  const args = { action: 'abandon', session_id: '00000000-0000-4000-8000-000000000001' };
+  const preview = await invoke(args);
+  assert.equal((preview?.result as { structuredContent: { confirmation_required: boolean } }).structuredContent.confirmation_required, true);
+  assert.equal(calls.length, 0);
+  const bad = await invoke({ ...args, session_id: 'bad', confirm: true });
+  assert.equal((bad?.result as { isError: boolean }).isError, true);
+  assert.equal(calls.length, 0);
+  assert.equal((await invoke({ ...args, confirm: true }))?.error, undefined);
+  await invoke({ action: 'complete', session_id: args.session_id });
+  assert.deepEqual(calls, [{ outcome: 'abandoned' }, { outcome: 'completed' }]);
+});

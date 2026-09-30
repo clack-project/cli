@@ -44,7 +44,7 @@ function parsePat<T>(schema: z.ZodType<T>, input: unknown, label: string): T {
 }
 
 const toolDefinitions = [
-  { name: 'platform_authoring', description: '공개 스킬 제작 세션·폼·자산·이미지 생성·패키징을 처리합니다. 이미지 생성에는 견적 승인 가격과 멱등성 키가 필요합니다. creator-content:write 권한이 필요합니다.', inputSchema: { type: 'object', ...z.toJSONSchema(authoringInput) }, annotations: { readOnlyHint: false, destructiveHint: false } },
+  { name: 'platform_authoring', description: '공개 스킬 제작 세션·폼·자산·이미지 생성·패키징·완료·포기를 처리합니다. complete/abandon은 폼 세션 전용이며 complete는 현재 revision 패키징, abandon은 confirm:true가 필요합니다. 에디터·지침형은 센터에서 작업합니다. 이미지 생성에는 견적 승인 가격과 멱등성 키가 필요합니다. creator-content:write 권한이 필요합니다.', inputSchema: { type: 'object', ...z.toJSONSchema(authoringInput) }, annotations: { readOnlyHint: false, destructiveHint: true } },
   { name: 'platform_usage_get', description: '서버 키가 속한 콘텐츠의 플랫폼 사용량을 조회합니다.',
     inputSchema: z.toJSONSchema(platformReadSchemas.usage), annotations: { readOnlyHint: true, destructiveHint: false } },
   { name: 'platform_server_data_get', description: '서버 키로 콘텐츠 데이터 문서를 조회합니다. data:read 권한이 필요합니다.',
@@ -171,8 +171,14 @@ export class PlatformMcpServer {
     if (patDestructiveToolNames.has(name) && (!isObject(args) || args.confirm !== true)) {
       return { preview: true, confirmation_required: true, tool: name, arguments: redact(args) };
     }
+    if (name === 'platform_authoring') {
+      const input = parsePat(authoringInput, args, '제작 작업 입력');
+      if (input.action === 'abandon' && input.confirm !== true) {
+        return { preview: true, confirmation_required: true, tool: name, arguments: redact(input) };
+      }
+      return authoringRequest(platformPatClient(this.settings, this.env), input, 'mcp');
+    }
     const client = platformPatClient(this.settings, this.env);
-    if (name === 'platform_authoring') return authoringRequest(client, args, 'mcp');
     if (name === 'platform_skill_list') {
       const { q } = parsePat(patSchemas.skillList, args, '스킬 목록 조회 입력');
       return client.request('GET', '/v4/skills', { query: { q } });

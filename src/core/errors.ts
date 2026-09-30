@@ -21,6 +21,9 @@ export function apiError(status: number, body: unknown, retryAfter: string | nul
   let message = typeof value.message === 'string' ? value.message : `요청에 실패했습니다 (${status}).`;
   if (status === 401 && code === 'SERVER_KEY_INVALID') message += ' 센터에서 서버 키 상태를 확인하거나 새로 발급·회전하세요.';
   else if (status === 401) message += ' clack login으로 다시 연결하세요.';
+  if (code === 'SESSION_REQUIRED') message += ' 에디터·지침형 스킬은 크리에이터 센터에서 작업하세요. 폼 세션만 PAT로 만들고 끝낼 수 있습니다.';
+  if (code === 'AUTHORING_NOT_PACKAGED') message += ' JSON action:package를 clack authoring --input <파일>로 실행한 뒤 authoring complete <세션-ID>를 실행하세요.';
+  if (code === 'AUTHORING_SESSION_LOCKED') message += ' JSON action:get을 clack authoring --input <파일>로 실행해 상태를 확인하세요. 이미 종료된 세션은 다시 편집하거나 종료할 수 없습니다.';
   if (code === 'IDENTITY_VERIFICATION_REQUIRED') message += ' 앱에서 본인인증을 완료하세요.';
   if (code === 'SCOPE_DENIED') message += ' 필요한 권한으로 토큰을 다시 발급하세요.';
   if (code === 'SKILL_VERSION_MAJOR_REQUIRED') {
