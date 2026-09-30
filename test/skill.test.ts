@@ -277,3 +277,18 @@ test('공식 캐릭터챗 2.2.1 폼(다국어 안내·자리표시 키)을 로�
   assert.equal(prepared.manifest.name, 'clack-character-chat');
   assert.equal(prepared.manifest.version, '2.2.1');
 });
+
+// 2.2.2 매니페스트는 display에 description·tags_i18n·release_notes를 더한다. tags_i18n은 tags가 있어야 한다.
+test('display 다국어 키(description·tags_i18n·release_notes)를 허용하고 tags 없는 tags_i18n은 거부한다', async () => {
+  const { temp, dir } = await fixture();
+  try {
+    const display = { ...manifest.display, title: { ko: '캐릭터 챗 만들기', en: 'Create a character chat' },
+      description: { ko: '자세한 소개', en: 'Details' }, tags: ['캐릭터', '대화'], tags_i18n: { en: ['Character', 'Chat'] },
+      release_notes: { ko: '2.2.2: 영어로도 보여 줘요.', en: '2.2.2: Now available in English.' } };
+    await writeFile(join(dir, 'clack.skill.json'), JSON.stringify({ ...manifest, display }));
+    assert.equal((await prepareSkillPackage(dir)).manifest.name, 'my-skill');
+    const { tags: _tags, ...withoutTags } = display;
+    await writeFile(join(dir, 'clack.skill.json'), JSON.stringify({ ...manifest, display: withoutTags }));
+    await assert.rejects(prepareSkillPackage(dir), /공개 스킬 스키마/);
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});

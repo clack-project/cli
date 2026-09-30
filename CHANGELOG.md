@@ -4,7 +4,7 @@
 
 - `content update <id>`를 추가했다. 콘텐츠 제목·설명·종류·썸네일·메타데이터(대표 언어·언어별 제목/설명)·태그를 서버 PATCH와 같은 필드·길이 규칙으로 수정한다(`creator-content:write`). 서버가 거부할 입력은 요청 전에 막는다.
 - `content info-version <id> <version-id>`를 추가했다. 승인·반려된 버전의 번들을 재사용해 바뀐 정보만 담은 새 초안 버전을 만든다(`creator-content:write`). 게이트가 꺼진 환경의 `CONTENT_INFO_VERSION_DISABLED`, 바뀐 정보가 없는 `CONTENT_INFO_UNCHANGED`, 언어별 메타데이터 게이트 `CONTENT_METADATA_EXTRAS_DISABLED`는 다음에 할 일을 안내한다.
-- 공유 제작 계약 사본을 최신으로 맞췄다. 공식 캐릭터챗 2.2.1 폼의 다국어 안내·자리표시 키(`x-clack-help-i18n`, `x-clack-placeholder-i18n`)를 `skill validate`·`skill pack`·`skill push`가 통과시키고, 인트로 자동 구성 라벨 길이를 서버와 같이 언어별 최댓값으로 계산한다.
+- 공유 제작 계약 사본을 최신으로 맞췄다. 스킬 매니페스트 `display`의 다국어 키(`description`·`tags_i18n`·`release_notes`)를 허용한다(`tags_i18n`은 `tags`가 있어야 한다). 공식 캐릭터챗 2.2.1 폼의 다국어 안내·자리표시 키(`x-clack-help-i18n`, `x-clack-placeholder-i18n`)를 `skill validate`·`skill pack`·`skill push`가 통과시키고, 인트로 자동 구성 라벨 길이를 서버와 같이 언어별 최댓값으로 계산한다.
 
 ## 0.2.0
 
