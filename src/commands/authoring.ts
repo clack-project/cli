@@ -25,6 +25,8 @@ export const authoringInput = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('fill'), ...session, revision, fields: z.array(field).max(60).optional(), instruction: z.string().max(4000).optional(), tier: z.enum(['economy', 'performance']).optional() }),
   z.strictObject({ action: z.literal('fill-status'), ...session, job_id: z.uuid() }),
   z.strictObject({ action: z.literal('package'), ...session, revision }),
+  z.strictObject({ action: z.literal('complete'), ...session }),
+  z.strictObject({ action: z.literal('abandon'), ...session, confirm: z.boolean().optional() }),
 ]);
 
 /** 센터와 동일한 제작 API를 CLI와 로컬 MCP에서 공유한다. */
@@ -38,6 +40,9 @@ export async function authoringRequest(client: ApiClient, raw: unknown, surface:
     return client.request('POST', base, { body: { ...body, surface } });
   }
   const path = `${base}/${input.session_id}`;
+  if (input.action === 'complete' || input.action === 'abandon') {
+    return client.request('POST', `${path}/complete`, { body: { outcome: input.action === 'complete' ? 'completed' : 'abandoned' } });
+  }
   if (input.action === 'get') return client.request('GET', path);
   if (input.action === 'assets') return client.request('GET', `${path}/assets`);
   if (input.action === 'quote') return client.request('GET', `${path}/tools/image.generate/quote`);
@@ -65,15 +70,28 @@ export async function authoringRequest(client: ApiClient, raw: unknown, surface:
 }
 
 export function registerAuthoringCommands(program: Command, runtime: Runtime) {
-  runtime.action(program.command('authoring').description('공개 스킬로 제작·자산 업로드·이미지 생성·패키징 (creator-content:write)')
-    .requiredOption('--input <file>', 'action과 요청 값이 있는 JSON 파일'), async (ctx, _args, opts) => {
-    const input = await readPlatformBodyFile(opts.input);
+  const command = program.command('authoring').description('스킬 제작·패키징·폼 세션 완료/포기 (creator-content:write)')
+    .option('--input <file>', 'action과 요청 값이 있는 JSON 파일')
+    .addHelpText('after', '\n폼 세션만 PAT로 완료·포기할 수 있습니다. 에디터·지침형은 센터에서 작업하세요.\ncomplete는 현재 revision을 package한 뒤 사용합니다. 종료 재호출은 AUTHORING_SESSION_LOCKED입니다.');
+  const run = async (ctx: Parameters<Parameters<Runtime['action']>[1]>[0], raw: unknown) => {
+    const parsed = authoringInput.safeParse(raw);
+    if (!parsed.success) throw new CliError('제작 작업 입력 형식을 확인하세요.', 'VALIDATION_ERROR');
     if (ctx.options.dryRun) {
-      const parsed = authoringInput.safeParse(input);
-      if (!parsed.success) throw new CliError('제작 작업 입력 형식을 확인하세요.');
       ctx.output({ dry_run: true, input: parsed.data });
       return;
     }
-    ctx.output(await authoringRequest(ctx.api, input));
+    if (parsed.data.action === 'abandon') await ctx.confirm(`제작 세션 ${parsed.data.session_id}을 포기합니다. 이후 편집할 수 없습니다. 기존 콘텐츠는 유지됩니다.`);
+    ctx.output(await authoringRequest(ctx.api, parsed.data));
+  };
+  runtime.action(command, async (ctx, _args, opts) => {
+    if (!opts.input) throw new CliError('--input <file> 또는 complete/abandon <session-id>를 지정하세요.');
+    await run(ctx, await readPlatformBodyFile(opts.input));
   });
+  for (const action of ['complete', 'abandon'] as const) {
+    runtime.action(command.command(`${action} <session-id>`)
+      .description(action === 'complete' ? '현재 패키징된 폼 세션을 완성 상태로 종료' : '폼 세션 포기 (비대화형 실행은 --yes 필요)'), async (ctx, args, opts) => {
+      if (opts.input) throw new CliError('하위 명령과 --input을 함께 사용할 수 없습니다.');
+      await run(ctx, { action, session_id: args[0] });
+    });
+  }
 }
