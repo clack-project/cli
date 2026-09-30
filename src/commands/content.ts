@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { Runtime } from '../core/types.js';
 import { CliError } from '../core/errors.js';
 import { rememberSecret } from '../core/secrets.js';
-import { dryRun, mutate, parse } from '../lib/domain.js';
+import { csv, dryRun, mutate, parse } from '../lib/domain.js';
 import { inspectContentPackage } from '../lib/content-package.js';
 
 const MAX_BYTES = 30 * 1024 * 1024;
@@ -17,6 +17,58 @@ const createSchema = z.object({
   kind: z.enum(['html', 'gallery', 'slideshow', 'video']).default('html'),
   policy_version: z.literal('2026-09-22'),
 }).strict();
+
+/**
+ * 서버 `creatorContentUpdateSchema`(PATCH /v4/creator/contents/:id)와 필드·길이를 맞춘 사본이다.
+ * 서버가 최종 판정하고 CLI는 명백히 거부될 값만 요청 전에 막는다. 언어는 서버 SUPPORTED_LANGS(ko·en)와 같다.
+ */
+const METADATA_LANGS = ['ko', 'en'] as const;
+const TAG_PATTERN = /^[\p{L}\p{M}\p{N}_]{1,30}$/u;
+const localizedEntry = z.object({
+  title: z.string().trim().max(120),
+  description: z.string().trim().max(2000).optional(),
+}).strict();
+export const updateSchema = z.object({
+  title: z.string().trim().max(120).optional(),
+  description: z.string().trim().max(2000).optional(),
+  kind: z.enum(['html', 'gallery', 'slideshow', 'video']).optional(),
+  thumbnail_id: z.uuid().nullable().optional(),
+  metadata_mode: z.enum(['single', 'localized']).optional(),
+  metadata_lang: z.enum(METADATA_LANGS).nullable().optional(),
+  localized_metadata: z.partialRecord(z.enum(METADATA_LANGS), localizedEntry).nullable().optional(),
+  tags: z.array(z.string().max(64)).max(50).optional(),
+}).strict().superRefine((value, ctx) => {
+  const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
+  if (!Object.values(value).some((entry) => entry !== undefined)) issue('변경할 필드를 하나 이상 지정하세요.');
+  if (value.tags) {
+    const seen = new Set<string>();
+    for (const raw of value.tags) {
+      const tag = raw.trim().replace(/^#+/, '').trim().normalize('NFC');
+      if (!TAG_PATTERN.test(tag)) issue('해시태그는 글자·숫자·밑줄(_)만 사용해 1~30자로 입력하세요.');
+      const key = tag.normalize('NFKC').toLowerCase();
+      if (key.length > 40) issue('해시태그가 너무 깁니다. 더 짧게 입력하세요.');
+      seen.add(key);
+    }
+    if (seen.size > 10) issue('해시태그는 최대 10개까지 등록할 수 있습니다.');
+  }
+  if (value.metadata_mode === 'localized') {
+    if (!value.metadata_lang) issue('언어별로 입력하려면 --metadata-lang으로 대표 언어를 지정하세요.');
+    if (!value.localized_metadata) issue('언어별로 입력하려면 --localized-metadata로 대표 언어 외 언어를 1개 이상 지정하세요.');
+  }
+  if (value.localized_metadata) {
+    for (const [lang, entry] of Object.entries(value.localized_metadata)) {
+      if (entry && !entry.title.trim()) issue('선택한 모든 언어의 제목을 입력하세요.');
+      if (lang === value.metadata_lang) issue('대표 언어는 --title·--description에 넣고, 언어별 값에는 다른 언어만 넣을 수 있습니다.');
+    }
+    if (value.metadata_mode === 'single' && Object.keys(value.localized_metadata).length) issue('한 언어(single)로 입력할 때는 언어별 값을 보낼 수 없습니다.');
+  }
+});
+
+/** JSON 옵션 값을 읽는다. `none`은 null(해제)이다. */
+function jsonOption(name: string, value: string): unknown {
+  if (value === 'none') return null;
+  try { return JSON.parse(value); } catch { throw new CliError(`${name} 값은 JSON 객체이거나 none이어야 합니다.`); }
+}
 
 export async function prepareContentFile(source: string) {
   const file = resolve(source);
@@ -77,6 +129,24 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion });
     await mutate(ctx, 'POST', '/v4/creator/contents', body);
   });
+  runtime.action(content.command('update <id>').description('콘텐츠 정보(제목·설명·종류·썸네일·메타데이터·태그) 수정 (creator-content:write)')
+    .option('--title <text>', '제목 (120자 이하, 빈 값이면 제목 없음)').option('--description <text>', '설명 (2000자 이하)')
+    .addOption(new Option('--kind <kind>', '콘텐츠 종류').choices(['html', 'gallery', 'slideshow', 'video']))
+    .option('--thumbnail-id <uuid|none>', '썸네일 작업 ID, none이면 기본 이미지로 되돌림')
+    .addOption(new Option('--metadata-mode <mode>', '메타데이터 입력 방식').choices(['single', 'localized']))
+    .option('--metadata-lang <ko|en|none>', '대표 언어')
+    .option('--localized-metadata <json|none>', '대표 언어 외 언어별 제목·설명 JSON, 예: \'{"en":{"title":"Title","description":"About"}}\'')
+    .option('--tags <list>', '해시태그를 쉼표로 구분해 통째 교체, 빈 문자열이면 모두 삭제'), async (ctx, [id], opts) => {
+    const body = parse(updateSchema, {
+      title: opts.title, description: opts.description, kind: opts.kind,
+      thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId,
+      metadata_mode: opts.metadataMode,
+      metadata_lang: opts.metadataLang === undefined ? undefined : opts.metadataLang === 'none' ? null : opts.metadataLang,
+      localized_metadata: opts.localizedMetadata === undefined ? undefined : jsonOption('--localized-metadata', opts.localizedMetadata),
+      tags: opts.tags === undefined ? undefined : csv(opts.tags),
+    });
+    await mutate(ctx, 'PATCH', `/v4/creator/contents/${uuid(id)}`, body);
+  });
   runtime.action(content.command('upload <id> <file>').description('HTML/ZIP 업로드로 새 비공개 버전 생성 (creator-content:write)')
     .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']))
     .addOption(new Option('--color <scheme>', '헤더 색상').choices(['light', 'dark'])), async (ctx, [id, file], opts) => {
@@ -102,6 +172,11 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/submit`, { publish_on_approval: true }, '이 버전을 심사하고 통과하면 공개할까요?'));
   runtime.action(content.command('withdraw <id> <version-id>').description('진행 중인 심사 취소 (creator-content:write)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/review/cancel`, undefined, '이 버전의 심사를 취소할까요?'));
+  // 정보(제목·설명·썸네일·메타데이터·인트로)만 바꾼 새 버전을 만든다. 승인·반려된 버전이 원본이고 번들은 재사용한다.
+  // 서버가 201(새로 생성)·200(이미 있던 초안)으로 구분해 응답의 created로 알려 준다. 앱 확인·심사는 새 버전에서 다시 받는다.
+  runtime.action(content.command('info-version <id> <version-id>').description('바뀐 콘텐츠 정보만 담은 새 버전 생성 (creator-content:write)'), async (ctx, [id, versionId]) =>
+    mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/info-version`, undefined,
+      '현재 콘텐츠 정보로 이 버전을 복제한 새 초안을 만들까요? 새 버전은 앱 확인과 심사를 다시 받아야 합니다.'));
   // 승인은 됐지만 아직 공개하지 않은 버전을 나중에 공개한다. creator-content:publish 권한이 필요하다.
   runtime.action(content.command('publish <id> <version-id>').description('승인됐지만 공개하지 않은 버전 공개 (creator-content:publish)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/publish`, undefined, '승인된 이 버전을 공개할까요?'));

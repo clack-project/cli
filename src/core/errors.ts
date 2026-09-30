@@ -26,6 +26,9 @@ export function apiError(status: number, body: unknown, retryAfter: string | nul
   if (code === 'SKILL_VERSION_MAJOR_REQUIRED') {
     message += ' clack.skill.json·SKILL.md의 version을 올려 다시 push하세요. 같은 버전을 호환되게 고쳐 올리려면 먼저 clack skill cancel로 이 버전을 지우세요.';
   }
+  if (code === 'CONTENT_INFO_VERSION_DISABLED') message += ' clack content config의 info_version.enabled가 true인 환경에서만 사용할 수 있습니다.';
+  if (code === 'CONTENT_INFO_UNCHANGED') message += ' 정보를 먼저 clack content update로 수정한 뒤 다시 시도하세요.';
+  if (code === 'CONTENT_METADATA_EXTRAS_DISABLED') message += ' 이 환경에서는 언어별 메타데이터·태그를 아직 쓸 수 없습니다.';
   if (status === 423 || code === 'USER_BANNED') message += ' 계정 제한 상태를 앱에서 확인하세요.';
   if (status === 503 && code.endsWith('DISABLED')) message += ' 현재 외부 도구 접근이 일시 중단되었습니다.';
   const raw = Number(value.retry_after ?? retryAfter);

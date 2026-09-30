@@ -98,13 +98,74 @@
           },
           "maxItems": 10,
           "uniqueItems": true
+        },
+        "description": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
+        },
+        "tags_i18n": {
+          "type": "object",
+          "properties": {
+            "en": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "minItems": 1,
+              "maxItems": 10,
+              "uniqueItems": true
+            }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
+        "release_notes": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "title",
         "summary",
         "category"
-      ]
+      ],
+      "dependentRequired": {
+        "tags_i18n": [
+          "tags"
+        ]
+      }
     },
     "authoring": {
       "type": "object",

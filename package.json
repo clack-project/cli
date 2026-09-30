@@ -1,6 +1,6 @@
 {
   "name": "@clack-platform/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "클랙 계정의 상품·콘텐츠·프로필을 관리하는 CLI",
   "type": "module",
   "bin": {

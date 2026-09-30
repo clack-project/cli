@@ -7,5 +7,10 @@ export function walkDataSchema(schema: Record<string, unknown>, visit: (node: Re
   pointer: string; depth: number; root: string | null; visibility: 'public' | 'private' | null | undefined; refs: string[];
   branch: boolean; cycle?: boolean; unresolved?: boolean;
 }) => void): void;
+/**
+ * 폼 필드 라벨: x-clack-i18n[lang] → x-clack-i18n.ko → title → fallback(문자열이 아니거나 빈 후보는 건너뛴다).
+ * normalize를 주면 후보마다 적용한 뒤 빈 값을 건너뛴다(자동 구성은 NFC·앞뒤 공백 제거).
+ */
+export function formFieldLabel(node: unknown, fallback: string, lang?: string, options?: { normalize?: (value: string) => string }): string;
 /** 직전 승인 버전 대비 비공개→공개로 바뀐 루트 키(업로드 422 SKILL_DATA_VISIBILITY_CHANGED, 업그레이드 409 DATA_VISIBILITY_CHANGED). */
 export function inspectDataVisibilityChange(previous: Record<string, unknown> | null | undefined, next: Record<string, unknown>): Array<{ path: string; message: string }>;

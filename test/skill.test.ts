@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -267,4 +268,27 @@ test('버전 경로의 점은 허용하되 경로 탐색은 요청 전에 차단
     fetch: async () => { called = true; return new Response('{}'); } });
   await assert.rejects(client.request('GET', '/v4/skills/my-skill/../private'), /API 경로/);
   assert.equal(called, false);
+});
+
+// 공식 캐릭터챗 2.2.1 폼은 x-clack-help-i18n·x-clack-placeholder-i18n 형제 키를 쓴다. 모노레포가 없으면 건너뛴다.
+const monorepo = process.env.CLACK_MONOREPO_DIR ?? '../clack';
+test('공식 캐릭터챗 2.2.1 폼(다국어 안내·자리표시 키)을 로컬 검사가 통과시킨다', { skip: !existsSync(join(monorepo, 'clack-api-v4/skills/clack-character-chat/2.2.1')) }, async () => {
+  const prepared = await prepareSkillPackage(join(monorepo, 'clack-api-v4/skills/clack-character-chat/2.2.1'));
+  assert.equal(prepared.manifest.name, 'clack-character-chat');
+  assert.equal(prepared.manifest.version, '2.2.1');
+});
+
+// 2.2.2 매니페스트는 display에 description·tags_i18n·release_notes를 더한다. tags_i18n은 tags가 있어야 한다.
+test('display 다국어 키(description·tags_i18n·release_notes)를 허용하고 tags 없는 tags_i18n은 거부한다', async () => {
+  const { temp, dir } = await fixture();
+  try {
+    const display = { ...manifest.display, title: { ko: '캐릭터 챗 만들기', en: 'Create a character chat' },
+      description: { ko: '자세한 소개', en: 'Details' }, tags: ['캐릭터', '대화'], tags_i18n: { en: ['Character', 'Chat'] },
+      release_notes: { ko: '2.2.2: 영어로도 보여 줘요.', en: '2.2.2: Now available in English.' } };
+    await writeFile(join(dir, 'clack.skill.json'), JSON.stringify({ ...manifest, display }));
+    assert.equal((await prepareSkillPackage(dir)).manifest.name, 'my-skill');
+    const { tags: _tags, ...withoutTags } = display;
+    await writeFile(join(dir, 'clack.skill.json'), JSON.stringify({ ...manifest, display: withoutTags }));
+    await assert.rejects(prepareSkillPackage(dir), /공개 스킬 스키마/);
+  } finally { await rm(temp, { recursive: true, force: true }); }
 });
