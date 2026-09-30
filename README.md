@@ -63,7 +63,7 @@ clack login --resume --env dev   # 발급 당시와 같은 환경이어야 한�
 | 크리에이터 채널 | `channel get/create/update`, `channel post list/get/create/update/delete`, `channel series list/create/update/delete` |
 | 이미지 | `upload <파일...>` |
 | 설정 | `config get`, `config set <키> <값>` |
-| HTML 콘텐츠 | `content config/list/status/create/upload/complete/preview/submit/withdraw/publish/unpublish` |
+| HTML 콘텐츠 | `content config/list/status/create/update/upload/complete/info-version/preview/submit/withdraw/publish/unpublish` |
 | 에이전트 연결 | `mcp config`, `skills` |
 | 스킬 패키지·관리 | `skill validate`, `skill pack`, `skill editor dev`, `skill push`, `skill complete`, `skill submit`, `skill list`, `skill get`, `skill form`, `skill status`, `skill cancel`, `skill release`, `skill deprecate` |
 | 콘텐츠 서버 키(platform:read/write) | `content server-keys list/revoke` (발급·회전은 크리에이터 센터 전용) |
@@ -162,7 +162,7 @@ GitHub Actions는 Linux·macOS·Windows × Node 20·22에서 `pnpm check`와 패
 |---|---|
 | `config` | 없음(로그인 불필요) |
 | `list`, `status`, `preview` | `creator-content:read` |
-| `create`, `upload`, `complete`, `withdraw` | `creator-content:write` |
+| `create`, `update`, `upload`, `complete`, `info-version`, `withdraw` | `creator-content:write` |
 | `submit` | `creator-content:write`와 `creator-content:publish` 모두 |
 | `publish`, `unpublish` | `creator-content:publish` |
 
@@ -180,6 +180,15 @@ clack content preview --env dev <콘텐츠-UUID> <버전-UUID>
 `content upload`는 최대 30 MiB의 HTML/ZIP을 체크섬과 함께 비공개 저장소에 전송합니다. 전송 후 완료 응답만 실패하면 출력된 `content complete` 명령으로 같은 업로드를 재처리할 수 있습니다. `--dry-run`은 파일·입력 검사만 수행합니다. `creator-content` 약식 scope는 읽기·쓰기만 요청하며 `submit`·`publish`·`unpublish`에 필요한 `creator-content:publish`는 명시적으로 요청해야 합니다. 정책 내용을 크리에이터 센터에서 확인한 뒤 `--policy-version`으로 동의한 버전을 지정하세요.
 
 ZIP에 `clack.content.json` 또는 `.clack/`가 있으면 업로드 전에 선언·경로·크기와 프로필 파일 대응을 확인하고 표준 오류에 경고합니다. 선언이 없는 기존 정적 ZIP도 계속 업로드할 수 있습니다. 경고는 업로드를 막지 않으며 서버의 최종 검증·심사 결과를 대신하지 않습니다. 전송 없이 확인하려면 `content upload ... --dry-run`을 사용하세요.
+
+`content update`는 제목·설명·종류·썸네일·메타데이터·태그를 서버 PATCH와 같은 규칙으로 수정합니다(`--title`, `--description`, `--kind`, `--thumbnail-id <UUID|none>`, `--metadata-mode single|localized`, `--metadata-lang ko|en|none`, `--localized-metadata '<JSON>'|none`, `--tags 쉼표목록`). 지정한 필드만 바뀌고 `--tags`·`--localized-metadata`는 통째 교체됩니다. 언어별 메타데이터·태그는 서버 게이트가 켜진 환경에서만 쓸 수 있습니다. 인트로 저장은 개인 액세스 토큰으로 할 수 없어 크리에이터 센터에서만 합니다.
+
+`content info-version <콘텐츠-UUID> <버전-UUID>`는 승인·반려된 버전의 번들을 재사용해 바뀐 콘텐츠 정보만 담은 새 초안 버전을 만듭니다(새로 만들면 201, 이미 있던 초안이면 200이며 응답의 `created`로 구분). 새 버전은 앱 확인과 심사를 다시 받아야 합니다. 서버 게이트가 꺼진 환경에서는 `CONTENT_INFO_VERSION_DISABLED`(409)가 반환되며 `clack content config`의 `info_version.enabled`로 확인할 수 있습니다.
+
+```bash
+clack content update --env dev <콘텐츠-UUID> --title "새 제목" --tags 여행,사진
+clack content info-version --env dev <콘텐츠-UUID> <버전-UUID>
+```
 
 심사는 승인됐지만 아직 공개하지 않은 버전(크리에이터 센터 등록·게시 중단 후 재공개 등)은 `creator-content:publish` 권한으로 공개합니다. 승인 이력·심사 해시·현재 계정과 권한을 공개 시점에 다시 검사합니다.
 

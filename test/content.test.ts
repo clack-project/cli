@@ -167,3 +167,48 @@ test('공개·서버 키·공유 문서 명령은 실제 PAT 경로와 확인 �
   await assert.rejects(run('content', 'server-keys', 'revoke', contentId, 'not-a-number'));
   await assert.rejects(run('content', 'shared', 'list', contentId, '../etc'));
 });
+
+test('content update·info-version은 PATCH·POST 경로와 서버 본문 규칙, 확인 절차를 따른다', async () => {
+  const calls: { call: string; body: unknown }[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    calls.push({ call: `${init?.method ?? 'GET'} ${url.pathname}`, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    return new Response(JSON.stringify({ data: { ok: true } }), { headers: { 'X-CLACK-Time-Contract': 'utc-v1' } });
+  };
+  const confirmations: string[] = [];
+  const ctx: CommandContext = { api: new ApiClient({ baseUrl: 'https://v4-api.dev.clack.kr', token: `pat_${'a'.repeat(64)}`, fetch: fetcher }),
+    options: {}, output: () => {}, confirm: async (message) => { confirmations.push(message); } };
+  const runtime: Runtime = { action(command, handler) { command.action(async (...values: unknown[]) => {
+    await handler(ctx, values.slice(0, -2) as string[], (values.at(-1) as Command).opts());
+  }); } };
+  async function run(...args: string[]) {
+    const program = new Command().exitOverride();
+    registerContentCommands(program, runtime);
+    await program.parseAsync(args, { from: 'user' });
+  }
+  const root = `/v4/creator/contents/${contentId}`;
+  await run('content', 'update', contentId, '--title', '  새 제목 ', '--description', '', '--thumbnail-id', 'none', '--tags', '#여행, travel');
+  await run('content', 'update', contentId, '--metadata-mode', 'localized', '--metadata-lang', 'ko',
+    '--localized-metadata', '{"en":{"title":"Title","description":"About"}}');
+  await run('content', 'update', contentId, '--tags', '');
+  await run('content', 'info-version', contentId, versionId);
+  assert.deepEqual(calls, [
+    { call: `PATCH ${root}`, body: { title: '새 제목', description: '', thumbnail_id: null, tags: ['#여행', 'travel'] } },
+    { call: `PATCH ${root}`, body: { metadata_mode: 'localized', metadata_lang: 'ko', localized_metadata: { en: { title: 'Title', description: 'About' } } } },
+    { call: `PATCH ${root}`, body: { tags: [] } },
+    { call: `POST ${root}/versions/${versionId}/info-version`, body: undefined },
+  ]);
+  assert.equal(confirmations.length, 1);
+  // 서버가 거부할 입력은 요청 전에 막는다.
+  const before = calls.length;
+  await assert.rejects(run('content', 'update', contentId));
+  await assert.rejects(run('content', 'update', contentId, '--title', 'x'.repeat(121)));
+  await assert.rejects(run('content', 'update', contentId, '--thumbnail-id', 'not-uuid'));
+  await assert.rejects(run('content', 'update', contentId, '--metadata-mode', 'localized'));
+  await assert.rejects(run('content', 'update', contentId, '--metadata-mode', 'localized', '--metadata-lang', 'ko', '--localized-metadata', '{"ko":{"title":"a"}}'));
+  await assert.rejects(run('content', 'update', contentId, '--localized-metadata', '{깨짐'));
+  await assert.rejects(run('content', 'update', contentId, '--tags', 'a-b'));
+  await assert.rejects(run('content', 'update', contentId, '--tags', Array.from({ length: 11 }, (_, i) => `t${i}`).join(',')));
+  await assert.rejects(run('content', 'info-version', 'not-uuid', versionId));
+  assert.equal(calls.length, before);
+});

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -267,4 +268,12 @@ test('버전 경로의 점은 허용하되 경로 탐색은 요청 전에 차단
     fetch: async () => { called = true; return new Response('{}'); } });
   await assert.rejects(client.request('GET', '/v4/skills/my-skill/../private'), /API 경로/);
   assert.equal(called, false);
+});
+
+// 공식 캐릭터챗 2.2.1 폼은 x-clack-help-i18n·x-clack-placeholder-i18n 형제 키를 쓴다. 모노레포가 없으면 건너뛴다.
+const monorepo = process.env.CLACK_MONOREPO_DIR ?? '../clack';
+test('공식 캐릭터챗 2.2.1 폼(다국어 안내·자리표시 키)을 로컬 검사가 통과시킨다', { skip: !existsSync(join(monorepo, 'clack-api-v4/skills/clack-character-chat/2.2.1')) }, async () => {
+  const prepared = await prepareSkillPackage(join(monorepo, 'clack-api-v4/skills/clack-character-chat/2.2.1'));
+  assert.equal(prepared.manifest.name, 'clack-character-chat');
+  assert.equal(prepared.manifest.version, '2.2.1');
 });

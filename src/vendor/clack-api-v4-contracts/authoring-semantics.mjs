@@ -72,17 +72,46 @@ function inspectEditorSemantics(skill, data, fail) {
   }
 }
 
-/** 콘텐츠 인트로 한도(인트로 계획 _plans/creator-content-intro-plan.md §3.2·§3.9, U2·U3). 서버 `src/lib/creator-content-intro.ts`와 같은 값이다. */
+/** 콘텐츠 인트로 한도(인트로 계획 _plans/_done/creator-content-intro-plan.md §3.2·§3.9, U2·U3). 서버 `src/lib/creator-content-intro.ts`와 같은 값이다. */
 const INTRO_MAX_IMAGES = 8;
 const INTRO_CREATOR_COMMENT_MAX = 500;
 const INTRO_DESCRIPTION_MAX = 5000;
 /** 인트로 문구로 쓸 수 있는 자유 입력 위젯. 이미지(uuid)·가져오기(content_ref)·선택형 문자열은 쓰지 않는다. */
 const INTRO_TEXT_WIDGETS = new Set(['text', 'textarea']);
 
-/** 자동 구성 라벨(폼 필드 title, 없으면 필드 이름). 서버 `src/lib/skill-intro.ts`의 `skillIntroFieldLabel`과 같은 규칙이다. */
-function introFieldLabel(name, field) {
-  const title = typeof field?.title === 'string' ? field.title.normalize('NFC').trim() : '';
-  return title || name;
+const labelRecord = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : null);
+
+/**
+ * 폼 필드 라벨(인트로 후속 F5 설계 `_plans/_done/creator-content-intro-followups-design.md` §2.2·§2.3):
+ * `x-clack-i18n[lang]` → `x-clack-i18n.ko` → `title` → `fallback` 순서로, 문자열이 아니거나 빈 후보는 건너뛴다.
+ * `options.normalize`를 주면 후보마다 적용한 뒤 빈 값을 건너뛴다(자동 구성은 NFC·앞뒤 공백 제거, 서버 `src/lib/skill-intro.ts`).
+ * 크리에이터 센터 `schemaLabel`·스킬 에디터 `nodeLabel`과 같은 순서다(센터는 다른 패키지라 사본을 쓴다).
+ */
+export function formFieldLabel(node, fallback, lang = 'ko', options = {}) {
+  const field = labelRecord(node);
+  const i18n = labelRecord(field?.['x-clack-i18n']);
+  const normalize = typeof options.normalize === 'function' ? options.normalize : (value) => value;
+  for (const candidate of [i18n?.[lang], i18n?.ko, field?.title]) {
+    if (typeof candidate !== 'string') continue;
+    const label = normalize(candidate);
+    if (label) return label;
+  }
+  return fallback;
+}
+
+const introLabelText = (value) => value.normalize('NFC').trim();
+
+/**
+ * 자동 구성 라벨의 최대 길이(F5 설계 §2.8). 라벨 언어는 콘텐츠 대표 언어로 정해지므로 어느 언어로 패키징해도 넘지 않도록
+ * `max(len(title||name), len(x-clack-i18n의 각 언어 값))`으로 센다. 값은 서버 `skillIntroFieldLabel`처럼 NFC·앞뒤 공백 제거 뒤 길이다.
+ */
+function introFieldLabelMaxLength(name, field) {
+  const title = typeof field?.title === 'string' ? introLabelText(field.title) : '';
+  const lengths = [(title || name).length];
+  for (const value of Object.values(labelRecord(field?.['x-clack-i18n']) ?? {})) {
+    if (typeof value === 'string') lengths.push(introLabelText(value).length);
+  }
+  return Math.max(...lengths);
 }
 
 /**
@@ -90,7 +119,7 @@ function introFieldLabel(name, field) {
  * - images: `output.asset_slots`의 field만. 단일 슬롯은 1장, multiple은 max장으로 세어 합계 8 이하(폼 없이도 검사한다).
  * - creator_comment·description: 공개(`x-clack-visibility: public`) 자유 입력 문자열 필드, 최대 길이 500·5000 이하.
  * - description_fallback: 자유 입력 문자열 필드만(공개 범위 무관 — 비공개 설정을 공개하는 유일한 명시 예외).
- *   자동 구성 최대 길이(필드마다 라벨+줄바꿈+최대 길이, 항목 사이 빈 줄)가 5000자를 넘으면 거부한다.
+ *   자동 구성 최대 길이(필드마다 라벨+줄바꿈+최대 길이, 항목 사이 빈 줄)가 5000자를 넘으면 거부한다. 라벨은 언어별 가장 긴 값으로 센다.
  */
 function inspectIntroSemantics(skill, form, slots, fail) {
   const intro = skill.output?.intro;
@@ -119,7 +148,7 @@ function inspectIntroSemantics(skill, form, slots, fail) {
   for (const name of fallback) {
     const field = textField(name);
     if (!field) { fail('/output/intro/description_fallback', '문자열(text·textarea) 폼 필드만 자동 구성에 쓸 수 있습니다.'); continue; }
-    composed += introFieldLabel(name, field).length + 1 + field.maxLength;
+    composed += introFieldLabelMaxLength(name, field) + 1 + field.maxLength;
   }
   composed += Math.max(0, fallback.length - 1) * 2;
   if (composed > INTRO_DESCRIPTION_MAX) fail('/output/intro/description_fallback', `자동 구성 최대 길이(라벨 포함)가 ${INTRO_DESCRIPTION_MAX}자를 넘습니다.`);
