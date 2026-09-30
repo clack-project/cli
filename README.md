@@ -183,7 +183,7 @@ ZIP에 `clack.content.json` 또는 `.clack/`가 있으면 업로드 전에 선�
 
 `content update`는 제목·설명·종류·썸네일·메타데이터·태그를 서버 PATCH와 같은 규칙으로 수정합니다(`--title`, `--description`, `--kind`, `--thumbnail-id <썸네일 작업 ID|none>`, `--metadata-mode single|localized`, `--metadata-lang ko|en|none`, `--localized-metadata '<JSON>'|none`, `--tags 쉼표목록`). 지정한 필드만 바뀌고 `--tags`·`--localized-metadata`는 통째 교체됩니다. 단일 메타데이터 모드에서는 제목을 비우면 「제목 없는 콘텐츠」로 표시되고, 언어별(`localized`) 모드에서는 빈 제목을 서버가 거부합니다(400). 썸네일 작업 ID는 `POST /v4/creator/thumbnails` 등으로 발급하며 CLI에는 썸네일 업로드 명령이 없어 보통 `none`(기본 이미지로 되돌리기)만 씁니다. 언어별 메타데이터·태그는 서버 게이트가 켜진 환경에서만 쓸 수 있습니다. 인트로 저장은 개인 액세스 토큰으로 할 수 없어 크리에이터 센터에서만 합니다.
 
-`content info-version <콘텐츠-UUID> <버전-UUID>`는 승인·반려된 버전의 번들을 재사용해 바뀐 콘텐츠 정보만 담은 새 초안 버전을 만듭니다(새로 만들면 201, 이미 있던 초안이면 200이며 응답의 `created`로 구분). 새 버전은 앱 확인과 심사를 다시 받아야 합니다. 서버 게이트가 꺼진 환경에서는 `CONTENT_INFO_VERSION_DISABLED`(409)가 반환되며 `clack content config`의 `info_version.enabled`로 확인할 수 있습니다.
+`content info-version <콘텐츠-UUID> <버전-UUID>`는 승인·반려된 버전의 번들을 재사용해 바뀐 콘텐츠 정보만 담은 새 초안 버전을 만듭니다(새로 만들면 201, 같은 정보의 미게시 버전(초안·심사 중·승인 미게시)이 있으면 200이며 응답의 `created`로 구분). 새 버전은 앱 확인과 심사를 다시 받아야 합니다. 서버 게이트가 꺼진 환경에서는 `CONTENT_INFO_VERSION_DISABLED`(409)가 반환되며 `clack content config`의 `info_version.enabled`로 확인할 수 있습니다.
 
 ```bash
 clack content update --env dev <콘텐츠-UUID> --title "새 제목" --tags 여행,사진

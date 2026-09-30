@@ -173,7 +173,7 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
   runtime.action(content.command('withdraw <id> <version-id>').description('진행 중인 심사 취소 (creator-content:write)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/review/cancel`, undefined, '이 버전의 심사를 취소할까요?'));
   // 정보(제목·설명·썸네일·메타데이터·인트로)만 바꾼 새 버전을 만든다. 승인·반려된 버전이 원본이고 번들은 재사용한다.
-  // 서버가 201(새로 생성)·200(이미 있던 초안)으로 구분해 응답의 created로 알려 준다. 앱 확인·심사는 새 버전에서 다시 받는다.
+  // 서버가 201(새로 생성)·200(같은 정보의 미게시 버전: 초안·심사 중·승인 미게시)으로 구분해 응답의 created로 알려 준다. 앱 확인·심사는 새 버전에서 다시 받는다.
   runtime.action(content.command('info-version <id> <version-id>').description('바뀐 콘텐츠 정보만 담은 새 버전 생성 (creator-content:write)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/info-version`, undefined,
       '현재 콘텐츠 정보로 이 버전을 복제한 새 초안을 만들까요? 새 버전은 앱 확인과 심사를 다시 받아야 합니다.'));
