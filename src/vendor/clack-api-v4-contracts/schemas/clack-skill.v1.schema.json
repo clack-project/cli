@@ -764,6 +764,37 @@
               "minItems": 1,
               "maxItems": 8,
               "uniqueItems": true
+            },
+            "sections": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "공개 문자열 폼 필드를 소개 섹션에 매핑합니다. 항목별 최대 2,000자, 선언된 필드 최대 길이 합계 6,000자입니다.",
+              "properties": {
+                "how_to": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "notice": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "character": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "setting": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "relationship": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "first_scene": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                }
+              }
             }
           }
         }

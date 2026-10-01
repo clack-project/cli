@@ -143,6 +143,16 @@ function inspectIntroSemantics(skill, form, slots, fail) {
     if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/${key}`, '공개 문자열(text·textarea) 폼 필드를 가리켜야 합니다.');
     else if (field.maxLength > max) fail(`/output/intro/${key}`, `가리키는 폼 필드의 최대 길이가 ${max}자 이하여야 합니다.`);
   }
+  let sectionLength = 0;
+  for (const [key, name] of Object.entries(intro.sections ?? {})) {
+    const field = textField(name);
+    if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/sections/${key}`, '소개 섹션은 공개 문자열(text·textarea) 폼 필드만 가리킬 수 있습니다.');
+    else {
+      if (field.maxLength > 2000) fail(`/output/intro/sections/${key}`, '소개 섹션의 최대 길이는 2,000자입니다.');
+      sectionLength += field.maxLength;
+    }
+  }
+  if (sectionLength > 6000) fail('/output/intro/sections', '소개 섹션의 최대 길이 합계는 6,000자입니다.');
   const fallback = intro.description_fallback ?? [];
   let composed = 0;
   for (const name of fallback) {
