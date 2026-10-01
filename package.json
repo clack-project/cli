@@ -39,7 +39,7 @@
     "test": "node scripts/test.mjs",
     "build": "tsup src/cli.ts --format esm --target node20 --clean",
     "check": "pnpm typecheck && node scripts/check-schema-sync.mjs && pnpm test && pnpm build",
-    "check:release": "pnpm typecheck && node scripts/check-schema-sync.mjs --strict && pnpm test && pnpm build",
+    "check:release": "pnpm typecheck && node scripts/check-schema-sync.mjs --strict && node scripts/sync-vendor-types.mjs --check && pnpm test && pnpm build",
     "prepack": "pnpm build"
   },
   "dependencies": {

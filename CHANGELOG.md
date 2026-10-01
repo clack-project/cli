@@ -7,6 +7,13 @@
 - 하위 폴더의 `references/__MACOSX/…`는 부가 파일이 아니라 일반 경로로 취급한다. 바깥 폴더를 벗긴 뒤 맨 위에 오는 `__MACOSX`는 `__` 시작 경로로 거부한다.
 - `skill push`의 `complete` 단계에서 서버가 검사 실패(4xx, 429 제외)로 돌려주면 같은 버전 ID 재시도 대신 패키지를 고쳐 같은 버전으로 다시 `clack skill push`하도록 안내한다. 5xx·429·연결 실패는 기존처럼 `skill complete` 재시도를 안내한다.
 - 서버 오류 응답에 `details`가 있으면 사유·파일·문제 위치(`issues`)·기대/실제 값을 오류 메시지 아래에 함께 출력한다.
+
+## 0.3.1
+
+- `clack authoring complete <session-id>`와 `clack authoring abandon <session-id>`를 추가했다(`creator-content:write`). 폼(template) 세션을 완성 또는 포기 상태로 종료하며, 서버의 세션 종료 API(`POST .../complete`)에 `outcome`(`completed`·`abandoned`)을 보낸다. `complete`는 현재 revision을 `package`한 뒤에 쓴다. `abandon`은 확인 질문을 거치며 비대화형 실행에서는 `--yes`가 필요하다. 기존 `--input <file>` 방식도 `{"action":"complete"}`·`{"action":"abandon"}`으로 같은 동작을 지원한다. `--input`은 필수에서 선택으로 바뀌었고 하위 명령과 함께 쓸 수 없다. 입력 형식은 실제 실행에서도 요청 전에 검사해 `VALIDATION_ERROR`로 알린다.
+- 로컬 플랫폼 MCP의 `platform_authoring` 도구에 `complete`·`abandon` action을 추가했다. `abandon`은 `confirm:true`를 보내야 실행하고, 없으면 미리보기(`confirmation_required`)만 돌려준다. 도구 설명과 `destructiveHint`도 이에 맞게 고쳤다.
+- 종료 관련 서버 오류에 다음에 할 일을 안내한다. `SESSION_REQUIRED`(에디터·지침형 스킬은 크리에이터 센터에서 작업), `AUTHORING_NOT_PACKAGED`(`package` 실행 후 `complete`), `AUTHORING_SESSION_LOCKED`(`get`으로 상태 확인, 이미 종료된 세션은 다시 편집·종료 불가).
+- README에 제작 세션 종료 사용법과 오류 코드(`SESSION_REQUIRED`·`AUTHORING_NOT_FOUND`·`AUTHORING_NOT_PACKAGED`·`AUTHORING_SESSION_LOCKED`)를 추가했다.
 - `content info-version`의 HTTP 200 재사용 안내를 같은 정보의 미게시 버전(초안·심사 중·승인 미게시)으로 바로잡았다. 응답의 `created`를 그대로 출력하는 동작은 유지한다.
 
 ## 0.3.0

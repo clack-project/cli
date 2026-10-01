@@ -149,7 +149,7 @@ pnpm check          # typecheck → 스키마 동기화 확인 → 테스트 →
 npm pack --dry-run
 ```
 
-`pnpm check`는 나란히 체크아웃한 클랙 모노레포가 있으면(`CLACK_MONOREPO_DIR`, 기본 `../clack`) MCP 입력 스키마 일치도 함께 확인하고, 없으면 건너뛴다. 배포 전 로컬에서 이 확인을 강제하려면 `pnpm check:release`를 쓴다. `scripts/sync-vendor-types.mjs [--check]`는 `src/vendor/` 아래 복사해 둔 클랙 공개 타입·계약 파일을 같은 방식으로 모노레포와 동기화한다.
+`pnpm check`는 나란히 체크아웃한 클랙 모노레포가 있으면(`CLACK_MONOREPO_DIR`, 기본 `../clack`) MCP 입력 스키마 일치도 함께 확인하고, 없으면 건너뛴다. 배포 전 로컬에서 이 확인을 강제하려면 `pnpm check:release`를 쓴다(스키마 일치 엄격 검사와 `src/vendor/` 사본 `sync-vendor-types.mjs --check`를 함께 실행한다). `scripts/sync-vendor-types.mjs [--check]`는 `src/vendor/` 아래 복사해 둔 클랙 공개 타입·계약 파일을 같은 방식으로 모노레포와 동기화한다.
 
 GitHub Actions는 Linux·macOS·Windows × Node 20·22에서 `pnpm check`와 패키지 설치 스모크를 실행한다(`.github/workflows/ci.yml`). 배포는 `v0.1.0` 형태의 버전 태그를 push하면 `.github/workflows/publish.yml`이 태그와 `package.json` 버전 일치를 확인한 뒤 GitHub Actions의 OIDC 신뢰 게시로 npm에 공개한다.
 
