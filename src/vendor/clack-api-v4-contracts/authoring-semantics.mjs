@@ -38,16 +38,61 @@ function dataRootField(schema, name) {
   return field;
 }
 
+/**
+ * 의미 검사 보충 설명의 종류 → 한국어 문장. 검사 결과 한 건은 `{ path, message, code, args? }`이고 `message`는 이 표가 만든다.
+ * `code`(소문자 snake_case)와 `args`(문장에 끼워 넣은 값)는 언어와 무관하다. 서버는 이것을 검사 실패 기록의 위치마다 남기고
+ * (`issues[].why`·`issues[].args`), 크리에이터 센터 영어 화면이 같은 종류의 영어 문장을 만든다.
+ * 종류를 더하거나 이름을 바꾸면 센터 `src/lib/creator/skill-failure-text.ts`의 영어 문장 표도 같이 고친다(양쪽 테스트가 목록을 대조한다).
+ * 이미 저장된 기록이 옛 이름을 갖고 있으므로 이름을 바꾸기보다 새 종류를 더한다.
+ */
+export const SEMANTICS_NOTES = {
+  // 스킬 에디터 선언
+  editor_document_permissions: () => '에디터에는 document.read와 document.write 권한이 모두 필요합니다.',
+  ai_suggest_needs_ai_fill: () => 'ai.suggest 권한에는 authoring.ai_fill.enabled가 필요합니다.',
+  image_permission_needs_tool: () => 'tools.image.generate 권한에는 authoring.tools의 image.generate 선언이 필요합니다.',
+  editor_slot_aspect: () => '에디터 스킬은 슬롯 비율(aspect: slot)을 쓸 수 없습니다. 자산 노드의 x-clack-asset.aspect를 쓰세요.',
+  asset_limits_missing: () => '자산 노드가 있는 데이터 스키마에는 output.data.assets 한도가 필요합니다.',
+  asset_limits_unused: () => '자산 노드가 없는데 자산 한도를 선언했습니다.',
+  image_permission_no_asset: () => '이미지를 넣을 자산 노드가 없습니다.',
+  ai_suggest_no_node: () => 'x-clack-ai.suggest가 켜진 노드가 없습니다.',
+  metadata_text_key: () => '공개 문자열 루트 키를 가리켜야 합니다.',
+  metadata_asset_key: () => '공개 자산 루트 키를 가리켜야 합니다(인덱스 표기 불가).',
+  // 콘텐츠 인트로
+  intro_image_not_slot: () => '인트로 이미지는 output.asset_slots의 필드만 쓸 수 있습니다.',
+  intro_images_over: ({ max }) => `인트로 이미지는 슬롯 최대 장수 합계가 ${max}장 이하여야 합니다.`,
+  intro_text_field: () => '공개 문자열(text·textarea) 폼 필드를 가리켜야 합니다.',
+  intro_text_too_long: ({ max }) => `가리키는 폼 필드의 최대 길이가 ${max}자 이하여야 합니다.`,
+  intro_section_field: () => '소개 섹션은 공개 문자열(text·textarea) 폼 필드만 가리킬 수 있습니다.',
+  intro_section_too_long: () => '소개 섹션의 최대 길이는 2,000자입니다.',
+  intro_sections_total: () => '소개 섹션의 최대 길이 합계는 6,000자입니다.',
+  intro_fallback_field: () => '문자열(text·textarea) 폼 필드만 자동 구성에 쓸 수 있습니다.',
+  intro_fallback_too_long: ({ max }) => `자동 구성 최대 길이(라벨 포함)가 ${max}자를 넘습니다.`,
+  // 도구·이미지 슬롯
+  tool_duplicate: () => '도구 이름을 중복 선언할 수 없습니다.',
+  tool_batch_over_calls: () => '일괄 생성 수는 세션 호출 수를 넘을 수 없습니다.',
+  slot_field_duplicate: () => '슬롯 필드는 중복할 수 없습니다.',
+  slot_multiple_range: () => '다중 슬롯 최소 수는 최대 수보다 클 수 없습니다.',
+  slot_path_duplicate: () => '슬롯 파일 경로는 중복할 수 없습니다.',
+  slot_widget_mismatch: () => '슬롯과 이미지 위젯 종류가 일치해야 합니다.',
+  // 폼 필드 참조
+  form_field_missing: () => '선언한 폼 필드가 없습니다.',
+  slot_index_invalid: () => '다중 이미지 슬롯의 유효한 인덱스가 필요합니다.',
+  content_ref_declaration: () => 'content_ref에는 문자열과 x-clack-source 선언이 필요합니다.',
+  content_ref_import_chain: () => '다른 content_ref 필드로 가져올 수 없습니다.',
+  source_without_content_ref: () => 'x-clack-source는 content_ref에만 선언합니다.',
+  image_list_declaration: () => 'image_list에는 객체 배열과 자산 선언이 필요합니다.',
+};
+
 /** 스킬 에디터(`authoring.editor`) 선언의 필드 간 관계. `data`는 output.data.schema 파일을 파싱한 객체다(없으면 선언만 본다). */
 function inspectEditorSemantics(skill, data, fail) {
   const editor = skill.authoring?.editor;
   if (!editor) return;
   const permissions = new Set(editor.permissions ?? []);
-  if (!permissions.has('document.read') || !permissions.has('document.write')) fail('/authoring/editor/permissions', '에디터에는 document.read와 document.write 권한이 모두 필요합니다.');
-  if (permissions.has('ai.suggest') && skill.authoring?.ai_fill?.enabled !== true) fail('/authoring/editor/permissions', 'ai.suggest 권한에는 authoring.ai_fill.enabled가 필요합니다.');
+  if (!permissions.has('document.read') || !permissions.has('document.write')) fail('/authoring/editor/permissions', 'editor_document_permissions');
+  if (permissions.has('ai.suggest') && skill.authoring?.ai_fill?.enabled !== true) fail('/authoring/editor/permissions', 'ai_suggest_needs_ai_fill');
   const imageTool = (skill.authoring?.tools ?? []).find((tool) => tool.tool === 'image.generate');
-  if (permissions.has('tools.image.generate') && !imageTool) fail('/authoring/editor/permissions', 'tools.image.generate 권한에는 authoring.tools의 image.generate 선언이 필요합니다.');
-  if (imageTool?.aspect === 'slot') fail('/authoring/tools', '에디터 스킬은 슬롯 비율(aspect: slot)을 쓸 수 없습니다. 자산 노드의 x-clack-asset.aspect를 쓰세요.');
+  if (permissions.has('tools.image.generate') && !imageTool) fail('/authoring/editor/permissions', 'image_permission_needs_tool');
+  if (imageTool?.aspect === 'slot') fail('/authoring/tools', 'editor_slot_aspect');
   if (!data) return;
   let assets = 0;
   let suggest = 0;
@@ -55,20 +100,20 @@ function inspectEditorSemantics(skill, data, fail) {
     if (node['x-clack-asset']) assets++;
     if (node['x-clack-ai']?.suggest === true) suggest++;
   });
-  if (assets > 0 && !skill.output?.data?.assets) fail('/output/data/assets', '자산 노드가 있는 데이터 스키마에는 output.data.assets 한도가 필요합니다.');
-  if (assets === 0 && skill.output?.data?.assets) fail('/output/data/assets', '자산 노드가 없는데 자산 한도를 선언했습니다.');
-  if (assets === 0 && permissions.has('tools.image.generate')) fail('/authoring/editor/permissions', '이미지를 넣을 자산 노드가 없습니다.');
-  if (suggest === 0 && permissions.has('ai.suggest')) fail('/authoring/editor/permissions', 'x-clack-ai.suggest가 켜진 노드가 없습니다.');
+  if (assets > 0 && !skill.output?.data?.assets) fail('/output/data/assets', 'asset_limits_missing');
+  if (assets === 0 && skill.output?.data?.assets) fail('/output/data/assets', 'asset_limits_unused');
+  if (assets === 0 && permissions.has('tools.image.generate')) fail('/authoring/editor/permissions', 'image_permission_no_asset');
+  if (suggest === 0 && permissions.has('ai.suggest')) fail('/authoring/editor/permissions', 'ai_suggest_no_node');
   const metadata = skill.output?.metadata ?? {};
   for (const key of ['title', 'description']) {
     if (metadata[key] === undefined) continue;
     const field = dataRootField(data, metadata[key]);
-    if (!field || field.type !== 'string' || field['x-clack-asset'] || field['x-clack-visibility'] !== 'public') fail(`/output/metadata/${key}`, '공개 문자열 루트 키를 가리켜야 합니다.');
+    if (!field || field.type !== 'string' || field['x-clack-asset'] || field['x-clack-visibility'] !== 'public') fail(`/output/metadata/${key}`, 'metadata_text_key');
   }
   for (const key of ['thumbnail', 'thumbnail_fallback']) {
     if (metadata[key] === undefined) continue;
     const field = dataRootField(data, metadata[key]);
-    if (!field || !field['x-clack-asset'] || field['x-clack-visibility'] !== 'public') fail(`/output/metadata/${key}`, '공개 자산 루트 키를 가리켜야 합니다(인덱스 표기 불가).');
+    if (!field || !field['x-clack-asset'] || field['x-clack-visibility'] !== 'public') fail(`/output/metadata/${key}`, 'metadata_asset_key');
   }
 }
 
@@ -127,10 +172,10 @@ function inspectIntroSemantics(skill, form, slots, fail) {
   let images = 0;
   for (const name of intro.images ?? []) {
     const slot = slots.find((entry) => entry.field === name);
-    if (!slot) { fail('/output/intro/images', '인트로 이미지는 output.asset_slots의 필드만 쓸 수 있습니다.'); continue; }
+    if (!slot) { fail('/output/intro/images', 'intro_image_not_slot'); continue; }
     images += slot.multiple ? slot.multiple.max : 1;
   }
-  if (images > INTRO_MAX_IMAGES) fail('/output/intro/images', `인트로 이미지는 슬롯 최대 장수 합계가 ${INTRO_MAX_IMAGES}장 이하여야 합니다.`);
+  if (images > INTRO_MAX_IMAGES) fail('/output/intro/images', 'intro_images_over', { max: INTRO_MAX_IMAGES });
   if (!form) return;
   const properties = form.properties ?? {};
   const textField = (name) => {
@@ -140,51 +185,52 @@ function inspectIntroSemantics(skill, form, slots, fail) {
   for (const [key, max] of [['creator_comment', INTRO_CREATOR_COMMENT_MAX], ['description', INTRO_DESCRIPTION_MAX]]) {
     if (intro[key] === undefined) continue;
     const field = textField(intro[key]);
-    if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/${key}`, '공개 문자열(text·textarea) 폼 필드를 가리켜야 합니다.');
-    else if (field.maxLength > max) fail(`/output/intro/${key}`, `가리키는 폼 필드의 최대 길이가 ${max}자 이하여야 합니다.`);
+    if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/${key}`, 'intro_text_field');
+    else if (field.maxLength > max) fail(`/output/intro/${key}`, 'intro_text_too_long', { max });
   }
   let sectionLength = 0;
   for (const [key, name] of Object.entries(intro.sections ?? {})) {
     const field = textField(name);
-    if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/sections/${key}`, '소개 섹션은 공개 문자열(text·textarea) 폼 필드만 가리킬 수 있습니다.');
+    if (!field || field['x-clack-visibility'] !== 'public') fail(`/output/intro/sections/${key}`, 'intro_section_field');
     else {
-      if (field.maxLength > 2000) fail(`/output/intro/sections/${key}`, '소개 섹션의 최대 길이는 2,000자입니다.');
+      if (field.maxLength > 2000) fail(`/output/intro/sections/${key}`, 'intro_section_too_long');
       sectionLength += field.maxLength;
     }
   }
-  if (sectionLength > 6000) fail('/output/intro/sections', '소개 섹션의 최대 길이 합계는 6,000자입니다.');
+  if (sectionLength > 6000) fail('/output/intro/sections', 'intro_sections_total');
   const fallback = intro.description_fallback ?? [];
   let composed = 0;
   for (const name of fallback) {
     const field = textField(name);
-    if (!field) { fail('/output/intro/description_fallback', '문자열(text·textarea) 폼 필드만 자동 구성에 쓸 수 있습니다.'); continue; }
+    if (!field) { fail('/output/intro/description_fallback', 'intro_fallback_field'); continue; }
     composed += introFieldLabelMaxLength(name, field) + 1 + field.maxLength;
   }
   composed += Math.max(0, fallback.length - 1) * 2;
-  if (composed > INTRO_DESCRIPTION_MAX) fail('/output/intro/description_fallback', `자동 구성 최대 길이(라벨 포함)가 ${INTRO_DESCRIPTION_MAX}자를 넘습니다.`);
+  if (composed > INTRO_DESCRIPTION_MAX) fail('/output/intro/description_fallback', 'intro_fallback_too_long', { max: INTRO_DESCRIPTION_MAX });
 }
 
 /**
  * 공개 제작 규격의 필드 간 관계를 서버와 CLI에서 함께 검증한다.
  * 에디터 스킬은 `form` 대신 `data`(output.data.schema를 파싱한 객체)를 세 번째 인자로 넘긴다.
+ * 결과 한 건은 `{ path, message, code, args? }`다. `code`는 `SEMANTICS_NOTES`의 종류 이름이다.
  */
 export function inspectAuthoringSemantics(skill, form, data) {
   const errors = [];
-  const fail = (path, message) => errors.push({ path, message });
+  const fail = (path, code, args) => errors.push({ path, message: SEMANTICS_NOTES[code](args ?? {}), code, ...(args ? { args } : {}) });
   inspectEditorSemantics(skill, data, fail);
   const tools = skill.authoring?.tools ?? [];
-  if (new Set(tools.map((tool) => tool.tool)).size !== tools.length) fail('/authoring/tools', '도구 이름을 중복 선언할 수 없습니다.');
-  for (const tool of tools) if (tool.batch_max > tool.max_calls) fail('/authoring/tools', '일괄 생성 수는 세션 호출 수를 넘을 수 없습니다.');
+  if (new Set(tools.map((tool) => tool.tool)).size !== tools.length) fail('/authoring/tools', 'tool_duplicate');
+  for (const tool of tools) if (tool.batch_max > tool.max_calls) fail('/authoring/tools', 'tool_batch_over_calls');
   const slots = skill.output?.asset_slots ?? [];
   const paths = new Set();
   const fields = new Set();
   for (const slot of slots) {
-    if (fields.has(slot.field)) fail('/output/asset_slots', '슬롯 필드는 중복할 수 없습니다.');
+    if (fields.has(slot.field)) fail('/output/asset_slots', 'slot_field_duplicate');
     fields.add(slot.field);
-    if (slot.multiple && slot.multiple.min > slot.multiple.max) fail('/output/asset_slots', '다중 슬롯 최소 수는 최대 수보다 클 수 없습니다.');
+    if (slot.multiple && slot.multiple.min > slot.multiple.max) fail('/output/asset_slots', 'slot_multiple_range');
     for (let index = 0; index < (slot.multiple?.max ?? 1); index++) {
       const path = slot.multiple ? slot.multiple.path.replace('{n}', String(index)) : slot.path;
-      if (paths.has(path)) fail('/output/asset_slots', '슬롯 파일 경로는 중복할 수 없습니다.');
+      if (paths.has(path)) fail('/output/asset_slots', 'slot_path_duplicate');
       paths.add(path);
     }
   }
@@ -193,10 +239,10 @@ export function inspectAuthoringSemantics(skill, form, data) {
   const properties = form.properties ?? {};
   const exists = (expression, path) => {
     const match = /^([a-z][a-z0-9_-]*)(?:\[(\d+)\])?$/.exec(expression);
-    if (!match || !Object.hasOwn(properties, match[1])) { fail(path, '선언한 폼 필드가 없습니다.'); return; }
+    if (!match || !Object.hasOwn(properties, match[1])) { fail(path, 'form_field_missing'); return; }
     if (match[2] !== undefined) {
       const slot = slots.find((value) => value.field === match[1]);
-      if (!slot?.multiple || Number(match[2]) >= slot.multiple.max) fail(path, '다중 이미지 슬롯의 유효한 인덱스가 필요합니다.');
+      if (!slot?.multiple || Number(match[2]) >= slot.multiple.max) fail(path, 'slot_index_invalid');
     }
   };
   const entity = skill.output?.entity_map;
@@ -206,17 +252,17 @@ export function inspectAuthoringSemantics(skill, form, data) {
   }
   for (const slot of slots) {
     const node = properties[slot.field];
-    if (!node || node['x-clack-widget'] !== (slot.multiple ? 'image_list' : 'image')) fail('/output/asset_slots', '슬롯과 이미지 위젯 종류가 일치해야 합니다.');
+    if (!node || node['x-clack-widget'] !== (slot.multiple ? 'image_list' : 'image')) fail('/output/asset_slots', 'slot_widget_mismatch');
   }
   for (const [name, node] of Object.entries(properties)) {
     if (node['x-clack-widget'] === 'content_ref') {
-      if (node.type !== 'string' || !node['x-clack-source']) fail(`/properties/${name}`, 'content_ref에는 문자열과 x-clack-source 선언이 필요합니다.');
+      if (node.type !== 'string' || !node['x-clack-source']) fail(`/properties/${name}`, 'content_ref_declaration');
       for (const target of Object.keys(node['x-clack-source']?.import ?? {})) {
         exists(target, `/properties/${name}/x-clack-source/import`);
-        if (properties[target]?.['x-clack-widget'] === 'content_ref') fail(`/properties/${name}`, '다른 content_ref 필드로 가져올 수 없습니다.');
+        if (properties[target]?.['x-clack-widget'] === 'content_ref') fail(`/properties/${name}`, 'content_ref_import_chain');
       }
-    } else if (node['x-clack-source']) fail(`/properties/${name}`, 'x-clack-source는 content_ref에만 선언합니다.');
-    if (node['x-clack-widget'] === 'image_list' && (node.type !== 'array' || node.items?.type !== 'object' || !node['x-clack-asset'])) fail(`/properties/${name}`, 'image_list에는 객체 배열과 자산 선언이 필요합니다.');
+    } else if (node['x-clack-source']) fail(`/properties/${name}`, 'source_without_content_ref');
+    if (node['x-clack-widget'] === 'image_list' && (node.type !== 'array' || node.items?.type !== 'object' || !node['x-clack-asset'])) fail(`/properties/${name}`, 'image_list_declaration');
   }
   return errors;
 }
