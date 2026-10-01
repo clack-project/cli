@@ -331,6 +331,26 @@ test('ZIP의 바깥 폴더 한 겹은 벗기고 두 겹·조건 불충족은 거
   } finally { for (const f of [wrapped, double, partial]) await rm(f.temp, { recursive: true, force: true }); }
 });
 
+test('바깥 폴더 이름에는 경로 규칙을 적용하지 않고(숨김·__·scripts·공백·한글·.sh·.) 깨끗한 ZIP과 같은 결과를 낸다', async () => {
+  const clean = await zipFixture(cleanFiles());
+  const base = await prepareSkillPackage(clean.path);
+  const created = [clean];
+  try {
+    for (const outer of ['.hidden', '__x', 'scripts', 'my skill', '내 스킬', 'tool.sh', '.']) {
+      const f = await zipFixture({ [`${outer}/SKILL.md`]: enc(skillMd), [`${outer}/clack.skill.json`]: enc(JSON.stringify(manifest)) });
+      created.push(f);
+      const prepared = await prepareSkillPackage(f.path);
+      assert.equal(prepared.file_count, base.file_count, outer);
+      assert.equal(prepared.total_bytes, base.total_bytes, outer);
+    }
+    const macosx = await zipFixture({ '__MACOSX/SKILL.md': enc(skillMd), '__MACOSX/clack.skill.json': enc(JSON.stringify(manifest)) });
+    const dotdot = await zipFixture({ '../SKILL.md': enc(skillMd), '../clack.skill.json': enc(JSON.stringify(manifest)) });
+    created.push(macosx, dotdot);
+    await assert.rejects(prepareSkillPackage(macosx.path), /SKILL\.md와 clack\.skill\.json이 필요/);
+    await assert.rejects(prepareSkillPackage(dotdot.path), /허용되지 않는 ZIP 경로/);
+  } finally { for (const f of created) await rm(f.temp, { recursive: true, force: true }); }
+});
+
 test('__MACOSX는 맨 위 구성요소일 때만 부가 파일이고 하위 폴더의 __MACOSX는 패키지에 남는다', async () => {
   const nested = await zipFixture({ ...cleanFiles(), 'references/__MACOSX/x.md': enc('x') });
   const wrapped = await zipFixture({ 'w/SKILL.md': enc(skillMd), 'w/clack.skill.json': enc(JSON.stringify(manifest)), 'w/__MACOSX/x': enc('x') });
