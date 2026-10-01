@@ -15,6 +15,32 @@ export class CliError extends Error {
   }
 }
 
+/** 서버 오류의 `details`(reason·file·issues·expected·actual)를 사람이 읽을 위치 안내로 바꾼다. 없는 필드는 건너뛴다. */
+export function describeDetails(details: unknown): string[] {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return [];
+  const d = details as Record<string, unknown>;
+  const text = (v: unknown): string | undefined => typeof v === 'string' && v ? v.replace(/[\p{C}]/gu, '').slice(0, 160)
+    : typeof v === 'number' || typeof v === 'boolean' ? String(v) : undefined;
+  const lines: string[] = [];
+  const reason = text(d.reason);
+  if (reason) lines.push(`사유: ${reason}`);
+  const file = text(d.file);
+  if (file) lines.push(`파일: ${file}`);
+  if (Array.isArray(d.issues)) {
+    for (const issue of d.issues.slice(0, 5)) {
+      if (!issue || typeof issue !== 'object') continue;
+      const i = issue as Record<string, unknown>;
+      const parts = [['파일', i.file], ['위치', i.pointer], ['규칙', i.rule], ['값', i.param]]
+        .flatMap(([label, v]) => { const t = text(v); return t ? [`${label}=${t}`] : []; });
+      if (parts.length) lines.push(`문제: ${parts.join(' ')}`);
+    }
+  }
+  const expected = text(d.expected);
+  const actual = text(d.actual);
+  if (expected !== undefined || actual !== undefined) lines.push(`기대: ${expected ?? '-'} / 실제: ${actual ?? '-'}`);
+  return lines;
+}
+
 export function apiError(status: number, body: unknown, retryAfter: string | null): CliError {
   const value = body && typeof body === 'object' ? body as Record<string, unknown> : {};
   const code = typeof value.code === 'string' ? value.code : `HTTP_${status}`;
@@ -34,6 +60,8 @@ export function apiError(status: number, body: unknown, retryAfter: string | nul
   if (code === 'CONTENT_METADATA_EXTRAS_DISABLED') message += ' 이 환경에서는 언어별 메타데이터·태그를 아직 쓸 수 없습니다.';
   if (status === 423 || code === 'USER_BANNED') message += ' 계정 제한 상태를 앱에서 확인하세요.';
   if (status === 503 && code.endsWith('DISABLED')) message += ' 현재 외부 도구 접근이 일시 중단되었습니다.';
+  const located = describeDetails(value.details);
+  if (located.length) message += `\n${located.map((line) => `  ${line}`).join('\n')}`;
   const raw = Number(value.retry_after ?? retryAfter);
   const retry = Number.isFinite(raw) && raw > 0 ? Math.ceil(raw) : undefined;
   return new CliError(message, code, status, retry);

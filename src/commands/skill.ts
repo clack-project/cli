@@ -93,8 +93,13 @@ export async function pushSkillVersion(client: ApiClient, prepared: PreparedSkil
     if (error instanceof CliError && error.code === 'SKILL_VERSION_MAJOR_REQUIRED') {
       throw new CliError(`${error.message} (취소: clack skill cancel ${resolvedSkillId} ${session.version_id})`, error.code, error.status);
     }
-    if (error instanceof CliError) throw new CliError(`${error.message} 완료 재시도: clack skill complete ${resolvedSkillId} ${session.version_id}`,
-      error.code, error.status);
+    if (error instanceof CliError) {
+      // 서버가 검사에 실패한 예약(4xx, 429 제외)을 invalid로 닫으므로 같은 버전 ID 재시도는 거부된다. 패키지를 고쳐 같은 버전으로 다시 push한다.
+      const judged = error.status >= 400 && error.status < 500 && error.status !== 429;
+      const hint = judged ? '패키지를 고친 뒤 같은 버전으로 다시 clack skill push하세요.'
+        : `완료 재시도: clack skill complete ${resolvedSkillId} ${session.version_id}`;
+      throw new CliError(`${error.message}\n${hint}`, error.code, error.status, error.retryAfter);
+    }
     throw error;
   }
 }

@@ -15,6 +15,7 @@ import contentSchema from '../vendor/clack-api-v4-contracts/schemas/clack-conten
 const MAX_ZIP = 10 * 1024 * 1024;
 const MAX_EXPANDED = 30 * 1024 * 1024;
 const MAX_FILES = 500;
+const MAX_ZIP_ENTRIES = 2000;
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 ajv.addSchema(contentSchema);
@@ -71,6 +72,18 @@ export function skillPathAllowed(path: string): boolean {
   return true;
 }
 
+/** 압축 도구가 덧붙이는 부가 파일만 제외한다: 맨 위 구성요소 `__MACOSX`, 어디서든 파일 이름 `.DS_Store`·`._*`. 그 밖의 숨김 파일은 그대로 거부한다. */
+export function isArchiveMetadata(path: string): boolean {
+  const parts = path.split('/');
+  const name = parts.at(-1) ?? '';
+  return parts[0] === '__MACOSX' || name === '.DS_Store' || name.startsWith('._');
+}
+
+/** 부가 파일 아래여도 거부하는 위험 경로(절대 경로·`..`·제어 문자). */
+function unsafeArchivePath(path: string): boolean {
+  return path.startsWith('/') || /[\p{Cc}]/u.test(path) || path.split('/').includes('..');
+}
+
 async function collectFiles(directory: string): Promise<Record<string, Uint8Array>> {
   const files: Record<string, Uint8Array> = {};
   let totalBytes = 0;
@@ -78,6 +91,7 @@ async function collectFiles(directory: string): Promise<Record<string, Uint8Arra
     const entries = await readdir(join(directory, relative), { withFileTypes: true });
     for (const entry of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
       const path = relative ? `${relative}/${entry.name}` : entry.name;
+      if (isArchiveMetadata(path)) continue;
       if (!skillPathAllowed(path)) invalid(`허용되지 않는 패키지 경로: ${path}`);
       if (entry.isSymbolicLink() || !(entry.isDirectory() || entry.isFile())) invalid(`일반 파일·폴더만 허용됩니다: ${path}`);
       if (entry.isDirectory()) { await walk(path); continue; }
@@ -94,22 +108,50 @@ async function collectFiles(directory: string): Promise<Record<string, Uint8Arra
 
 function inspectZip(bytes: Uint8Array, expectedDirectory: string | undefined, hashMismatch: 'error' | 'warn'): Omit<PreparedSkillPackage, 'bytes' | 'sha256'> {
   if (!bytes.length || bytes.length > MAX_ZIP) invalid('스킬 ZIP은 비어 있지 않은 10 MiB 이하 파일이어야 합니다.');
-  const seen = new Set<string>();
-  let entries = 0;
-  let totalBytes = 0;
-  let extracted: Record<string, Uint8Array>;
+  // 1차 순회: 해제 없이 경로만 본다. 위험 경로 거부, 부가 파일 제외, 바깥 폴더 판정.
+  const raw: { name: string; dir: boolean }[] = [];
   try {
-    extracted = unzipSync(bytes, { filter(entry) {
-      entries++;
-      if (entries > MAX_FILES) invalid('스킬 파일 수가 500개를 초과했습니다.');
-      const path = entry.name.endsWith('/') ? entry.name.slice(0, -1) : entry.name;
-      if (!skillPathAllowed(path) || seen.has(path.toLowerCase())) invalid(`허용되지 않는 ZIP 경로: ${path}`);
-      seen.add(path.toLowerCase());
-      if (entry.name.endsWith('/')) return false;
+    unzipSync(bytes, { filter(entry) {
+      if (raw.length >= MAX_ZIP_ENTRIES) invalid('ZIP 항목 수가 2,000개를 초과했습니다.');
+      const dir = entry.name.endsWith('/');
+      raw.push({ name: dir ? entry.name.slice(0, -1) : entry.name, dir });
+      return false;
+    } });
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    return invalid('ZIP 구조를 읽을 수 없습니다.');
+  }
+  for (const { name } of raw) if (unsafeArchivePath(name)) invalid(`허용되지 않는 ZIP 경로: ${name.replace(/\p{C}/gu, '').slice(0, 160)}`);
+  const kept = raw.filter(({ name }) => !isArchiveMetadata(name));
+  const keptFiles = kept.filter(({ dir }) => !dir);
+  if (keptFiles.length > MAX_FILES) invalid('스킬 파일 수가 500개를 초과했습니다.');
+  // 부가 파일을 뺀 모든 파일이 한 폴더 아래에 있고 그 폴더에 SKILL.md와 clack.skill.json이 있을 때만 한 겹 벗긴다.
+  let prefix = '';
+  const top = keptFiles[0]?.name.split('/')[0];
+  if (top && keptFiles.every(({ name }) => name.startsWith(`${top}/`))) {
+    const names = new Set(keptFiles.map(({ name }) => name));
+    if (names.has(`${top}/SKILL.md`) && names.has(`${top}/clack.skill.json`)) prefix = `${top}/`;
+  }
+  const seen = new Set<string>();
+  const wanted = new Map<string, string>();
+  for (const { name, dir } of kept) {
+    if (dir && prefix && name === prefix.slice(0, -1)) continue;
+    const path = prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name;
+    if (!skillPathAllowed(path) || seen.has(path.toLowerCase())) invalid(`허용되지 않는 ZIP 경로: ${path}`);
+    seen.add(path.toLowerCase());
+    if (!dir) wanted.set(name, path);
+  }
+  // 2차 순회: 남긴 파일만 해제한다.
+  let totalBytes = 0;
+  const extracted: Record<string, Uint8Array> = {};
+  try {
+    const content = unzipSync(bytes, { filter(entry) {
+      if (!wanted.has(entry.name)) return false;
       totalBytes += entry.originalSize;
       if (totalBytes > MAX_EXPANDED) invalid('스킬 압축 해제 용량이 30 MiB를 초과했습니다.');
       return true;
     } });
+    for (const [name, data] of Object.entries(content)) extracted[wanted.get(name)!] = data;
   } catch (error) {
     if (error instanceof CliError) throw error;
     return invalid('ZIP 구조를 읽을 수 없습니다.');
