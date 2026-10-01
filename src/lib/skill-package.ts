@@ -72,11 +72,11 @@ export function skillPathAllowed(path: string): boolean {
   return true;
 }
 
-/** 압축 도구가 덧붙이는 부가 파일(`__MACOSX` 구성요소, `.DS_Store`, `._*`)만 제외한다. 서버와 같은 기준이며 그 밖의 숨김 파일은 그대로 거부한다. */
+/** 압축 도구가 덧붙이는 부가 파일만 제외한다: 맨 위 구성요소 `__MACOSX`, 어디서든 파일 이름 `.DS_Store`·`._*`. 그 밖의 숨김 파일은 그대로 거부한다. */
 export function isArchiveMetadata(path: string): boolean {
   const parts = path.split('/');
   const name = parts.at(-1) ?? '';
-  return parts.includes('__MACOSX') || name === '.DS_Store' || name.startsWith('._');
+  return parts[0] === '__MACOSX' || name === '.DS_Store' || name.startsWith('._');
 }
 
 /** 부가 파일 아래여도 거부하는 위험 경로(절대 경로·`..`·제어 문자). */
