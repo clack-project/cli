@@ -1,5 +1,5 @@
 export class CliError extends Error {
-  constructor(message: string, public code = 'VALIDATION_ERROR', public status = 400, public retryAfter?: number) {
+  constructor(message: string, public code = 'VALIDATION_ERROR', public status = 400, public retryAfter?: number, public recovery?: Record<string, string>) {
     super(message);
     this.name = 'CliError';
   }
