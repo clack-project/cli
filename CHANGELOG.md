@@ -1,5 +1,11 @@
 # 변경 이력
 
+## 0.3.3
+
+- `content thumbnail <파일> [--content <UUID>]`로 썸네일을 업로드하고 기존 콘텐츠에 연결한다. `content create/update --thumbnail-file`도 지원한다. 일반 이미지 업로드와 구분하며 서버가 공개한 형식·용량·픽셀 제한을 먼저 검사한다.
+- 업로드 후 콘텐츠 연결에 실패하면 발급한 썸네일 ID, 원래 환경·프로필·입력값을 유지한 재연결 명령과 상태 조회 명령을 구조화된 `recovery`로 제공한다. 다시 업로드하지 않고 `--thumbnail-id`로 복구할 수 있다.
+- `--dry-run`은 업로드·콘텐츠 변경을 하지 않고 공개 설정과 파일 조건만 확인한다. `--thumbnail-id none`으로 기본 썸네일을 명시적으로 선택할 수 있다.
+
 ## 0.3.2
 
 - 공유 제작 계약 사본을 최신으로 맞췄다. 스킬 매니페스트 `output.intro.sections`(`how_to`·`notice`·`character`·`setting`·`relationship`·`first_scene`)를 인식해, 공개 문자열 폼 필드만 가리키는지·항목별 최대 2,000자·선언된 필드 최대 길이 합계 6,000자를 서버와 같이 검사한다.
