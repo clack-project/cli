@@ -42,9 +42,16 @@ export async function uploadContentThumbnail(ctx: CommandContext, image: Awaited
   return { data: parsed.data, time_contract: response.time_contract };
 }
 /** 업로드 성공 뒤 연결 실패는 ID를 재사용하게 하며 쓰기 요청을 자동 반복하지 않는다. */
-export function thumbnailLinkFailure(cause: unknown, thumbnailId: string, contentId?: string): CliError {
+export function thumbnailLinkFailure(ctx: CommandContext, cause: unknown, thumbnailId: string, contentId?: string, creation?: Record<string, unknown>): CliError {
   const failure = asCliError(cause);
-  const command = contentId ? `clack content update ${contentId} --thumbnail-id ${thumbnailId}` : `clack content create --thumbnail-id ${thumbnailId}`;
-  return new CliError(`${failure.message}\n썸네일 업로드는 완료됐습니다 (ID: ${thumbnailId}). content status로 저장 여부를 확인한 뒤 ${command}로 연결하세요.`,
-    failure.code, failure.status, failure.retryAfter, { thumbnail_id: thumbnailId, ...(contentId ? { content_id: contentId } : {}), retry_command: command });
+  // 오류 안내를 복사해 실행해도 원래 API·프로필을 쓰도록 하고, 사용자 제목은 셸에서 실행되지 않게 인용한다.
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const prefix = `clack --base-url ${quote(ctx.api.settings.baseUrl)}${ctx.options.profile ? ` --profile ${quote(ctx.options.profile)}` : ''}`;
+  const createArgs = ['title', 'description', 'kind', 'policy_version'].flatMap(key => creation?.[key] === undefined ? []
+    : [`--${key.replaceAll('_', '-')} ${quote(String(creation[key]))}`]).join(' ');
+  const command = contentId ? `${prefix} content update ${contentId} --thumbnail-id ${thumbnailId}`
+    : `${prefix} content create ${createArgs} --thumbnail-id ${thumbnailId}`;
+  const verify = contentId ? `${prefix} content status ${contentId}` : `${prefix} content list`;
+  return new CliError(`${failure.message}\n썸네일 업로드는 완료됐습니다 (ID: ${thumbnailId}). ${verify}로 저장 여부를 확인한 뒤 ${command}로 연결하세요.`,
+    failure.code, failure.status, failure.retryAfter, { thumbnail_id: thumbnailId, ...(contentId ? { content_id: contentId } : {}), verification_command: verify, retry_command: command });
 }
