@@ -82,3 +82,13 @@ test('연결 실패 뒤 작업 ID와 재연결 명령을 제공하고 자동 재
   });
   assert.equal(calls.filter(call => call === 'POST /v4/creator/thumbnails').length, 1);
 }));
+test('신규 생성 복구는 같은 API·제목·정책을 유지하고 저장 여부를 먼저 조회한다', async () => fixture(async (file, ctx, _calls, _outputs, state) => {
+  state.fail = true;
+  await assert.rejects(command(ctx, 'content', 'create', '--title', "내 '작품' $(명령)", '--policy-version', '2026-09-22', '--thumbnail-file', file), (error: any) => {
+    assert.match(error.recovery.retry_command, /--base-url 'https:\/\/v4-api.dev.clack.kr'/);
+    assert.match(error.recovery.retry_command, /--policy-version '2026-09-22'/);
+    assert.ok(error.recovery.retry_command.includes("--title '내 '\\''작품'\\'' $(명령)'"));
+    assert.match(error.recovery.verification_command, /content list$/);
+    assert.equal(error.recovery.thumbnail_id, thumbnailId); return true;
+  });
+}));

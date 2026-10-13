@@ -121,7 +121,7 @@ async function saveWithThumbnail(ctx: import('../core/types.js').CommandContext,
   if (ctx.options.dryRun) { ctx.output({ dry_run: true, method, path, body: { ...body, thumbnail_id: '<업로드 후 발급>' }, thumbnail: { file: image.path, byte_size: image.bytes.length } }); return; }
   const uploaded = await uploadContentThumbnail(ctx, image);
   try { ctx.output(await ctx.api.request(method, path, { body: { ...body, thumbnail_id: uploaded.data.id } })); }
-  catch (failure) { throw thumbnailLinkFailure(failure, uploaded.data.id, contentId); }
+  catch (failure) { throw thumbnailLinkFailure(ctx, failure, uploaded.data.id, contentId, method === 'POST' ? body : undefined); }
 }
 
 /** 서버 키 발급·회전은 PAT보다 오래 사는 비밀값을 새로 만들므로 크리에이터 센터 세션 전용이다. CLI는 요청 없이 안내만 한다. */
@@ -172,7 +172,7 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     try {
       const result = await ctx.api.request('PATCH', `/v4/creator/contents/${contentId}`, { body: { thumbnail_id: uploaded.data.id } });
       ctx.output({ ...result, thumbnail: uploaded.data });
-    } catch (failure) { throw thumbnailLinkFailure(failure, uploaded.data.id, contentId); }
+    } catch (failure) { throw thumbnailLinkFailure(ctx, failure, uploaded.data.id, contentId); }
   });
   runtime.action(content.command('upload <id> <file>').description('HTML/ZIP 업로드로 새 비공개 버전 생성 (creator-content:write)')
     .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']))
