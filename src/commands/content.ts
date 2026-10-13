@@ -1,3 +1,4 @@
+import { prepareContentThumbnail, uploadContentThumbnail, thumbnailLinkFailure } from '../lib/content-thumbnail.js';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
@@ -16,6 +17,7 @@ const createSchema = z.object({
   description: z.string().trim().max(2000).default(''),
   kind: z.enum(['html', 'gallery', 'slideshow', 'video']).default('html'),
   policy_version: z.literal('2026-09-22'),
+  thumbnail_id: z.uuid().nullable().optional(),
 }).strict();
 
 /**
@@ -112,6 +114,16 @@ export async function putContentFile(session: UploadSession, bytes: Buffer, fetc
   } catch { throw new CliError('파일 업로드에 실패했습니다. 새 업로드를 시작하세요.', 'CONTENT_UPLOAD_FAILED', 0); }
 }
 
+/** 입력·콘텐츠 ID를 먼저 검사한 후 썸네일을 올린다. dry-run은 GET 설정 조회만 허용하고 업로드·연결은 하지 않는다. */
+async function saveWithThumbnail(ctx: import('../core/types.js').CommandContext, method: string, path: string, body: Record<string, unknown>, file?: string, contentId?: string) {
+  if (!file) { await mutate(ctx, method, path, body); return; }
+  const image = await prepareContentThumbnail(ctx, file);
+  if (ctx.options.dryRun) { ctx.output({ dry_run: true, method, path, body: { ...body, thumbnail_id: '<업로드 후 발급>' }, thumbnail: { file: image.path, byte_size: image.bytes.length } }); return; }
+  const uploaded = await uploadContentThumbnail(ctx, image);
+  try { ctx.output(await ctx.api.request(method, path, { body: { ...body, thumbnail_id: uploaded.data.id } })); }
+  catch (failure) { throw thumbnailLinkFailure(failure, uploaded.data.id, contentId); }
+}
+
 /** 서버 키 발급·회전은 PAT보다 오래 사는 비밀값을 새로 만들므로 크리에이터 센터 세션 전용이다. CLI는 요청 없이 안내만 한다. */
 const SERVER_KEY_CENTER_ONLY = '서버 키 발급·회전은 크리에이터 센터(내 콘텐츠 → 서버 키)에서만 할 수 있습니다. CLI·MCP의 개인 액세스 토큰으로는 서버 키 조회·폐기만 할 수 있습니다.';
 const collection = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, '이름은 영숫자·밑줄·붙임표 64자 이하여야 합니다.');
@@ -125,27 +137,42 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
   runtime.action(content.command('list').description('내 콘텐츠 목록 (creator-content:read)'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/contents')));
   runtime.action(content.command('status <id>').description('콘텐츠와 버전별 업로드·심사·공개 상태 (creator-content:read)'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}`)));
   runtime.action(content.command('create').description('콘텐츠 초안 등록 (creator-content:write)').requiredOption('--title <text>', '제목').option('--description <text>', '설명', '')
-    .option('--kind <kind>', 'html|gallery|slideshow|video', 'html').requiredOption('--policy-version <version>', '동의한 콘텐츠 제공 정책 버전'), async (ctx, _args, opts) => {
-    const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion });
-    await mutate(ctx, 'POST', '/v4/creator/contents', body);
+    .option('--kind <kind>', 'html|gallery|slideshow|video', 'html').requiredOption('--policy-version <version>', '동의한 콘텐츠 제공 정책 버전')
+    .addOption(new Option('--thumbnail-file <file>', '로컬 썸네일 이미지 업로드 후 연결').conflicts('thumbnailId'))
+    .addOption(new Option('--thumbnail-id <uuid|none>', '발급받은 썸네일 ID 또는 기본 이미지').conflicts('thumbnailFile')), async (ctx, _args, opts) => {
+    const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion, thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId });
+    await saveWithThumbnail(ctx, 'POST', '/v4/creator/contents', body, opts.thumbnailFile);
   });
   runtime.action(content.command('update <id>').description('콘텐츠 정보(제목·설명·종류·썸네일·메타데이터·태그) 수정 (creator-content:write)')
     .option('--title <text>', '제목 (120자 이하, 빈 값이면 제목 없음)').option('--description <text>', '설명 (2000자 이하)')
     .addOption(new Option('--kind <kind>', '콘텐츠 종류').choices(['html', 'gallery', 'slideshow', 'video']))
-    .option('--thumbnail-id <uuid|none>', '썸네일 작업 ID, none이면 기본 이미지로 되돌림')
+    .addOption(new Option('--thumbnail-id <uuid|none>', '썸네일 작업 ID, none이면 기본 이미지로 되돌림').conflicts('thumbnailFile'))
+    .addOption(new Option('--thumbnail-file <file>', '로컬 썸네일 이미지 업로드 후 연결').conflicts('thumbnailId'))
     .addOption(new Option('--metadata-mode <mode>', '메타데이터 입력 방식').choices(['single', 'localized']))
     .option('--metadata-lang <ko|en|none>', '대표 언어')
     .option('--localized-metadata <json|none>', '대표 언어 외 언어별 제목·설명 JSON, 예: \'{"en":{"title":"Title","description":"About"}}\'')
     .option('--tags <list>', '해시태그를 쉼표로 구분해 통째 교체, 빈 문자열이면 모두 삭제'), async (ctx, [id], opts) => {
     const body = parse(updateSchema, {
       title: opts.title, description: opts.description, kind: opts.kind,
-      thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId,
+      thumbnail_id: opts.thumbnailFile ? null : opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId,
       metadata_mode: opts.metadataMode,
       metadata_lang: opts.metadataLang === undefined ? undefined : opts.metadataLang === 'none' ? null : opts.metadataLang,
       localized_metadata: opts.localizedMetadata === undefined ? undefined : jsonOption('--localized-metadata', opts.localizedMetadata),
       tags: opts.tags === undefined ? undefined : csv(opts.tags),
     });
-    await mutate(ctx, 'PATCH', `/v4/creator/contents/${uuid(id)}`, body);
+    await saveWithThumbnail(ctx, 'PATCH', `/v4/creator/contents/${uuid(id)}`, body, opts.thumbnailFile, uuid(id));
+  });
+  runtime.action(content.command('thumbnail <file>').description('로컬 썸네일 업로드와 선택적 콘텐츠 연결 (creator-content:write)')
+    .option('--content <uuid>', '업로드 후 이 콘텐츠에 연결'), async (ctx, [file], opts) => {
+    const contentId = opts.content === undefined ? undefined : uuid(opts.content);
+    const image = await prepareContentThumbnail(ctx, file);
+    if (ctx.options.dryRun) { ctx.output({ dry_run: true, path: '/v4/creator/thumbnails', file: image.path, byte_size: image.bytes.length, ...(contentId ? { content_id: contentId } : {}) }); return; }
+    const uploaded = await uploadContentThumbnail(ctx, image);
+    if (!contentId) { ctx.output(uploaded); return; }
+    try {
+      const result = await ctx.api.request('PATCH', `/v4/creator/contents/${contentId}`, { body: { thumbnail_id: uploaded.data.id } });
+      ctx.output({ ...result, thumbnail: uploaded.data });
+    } catch (failure) { throw thumbnailLinkFailure(failure, uploaded.data.id, contentId); }
   });
   runtime.action(content.command('upload <id> <file>').description('HTML/ZIP 업로드로 새 비공개 버전 생성 (creator-content:write)')
     .addOption(new Option('--header <mode>', '헤더 표시').choices(['fixed', 'scroll_hide', 'translucent_scroll_hide', 'floating_close', 'floating_close_safe_area']))
