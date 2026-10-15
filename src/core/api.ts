@@ -18,6 +18,32 @@ export interface ApiOptions {
 }
 export class ApiClient {
   constructor(public readonly settings: ApiOptions) { if (settings.token) rememberSecret(settings.token); }
+  /** 허가된 고정 버전 이미지만 같은 API 원점에서 받는다. 리다이렉트에 인증을 전달하지 않는다. */
+  async downloadPublicAsset(contentId: string, assetId: string, query: { version_id: string; grant_revision: number; purpose: 'content' | 'template' }): Promise<Response> {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(contentId) || !uuid.test(query.version_id) || !/^[a-f0-9]{64}$/.test(assetId)
+      || !Number.isSafeInteger(query.grant_revision) || query.grant_revision < 0 || !['content', 'template'].includes(query.purpose)) throw new CliError('다운로드 식별자를 확인하세요.', 'VALIDATION_ERROR');
+    if (this.settings.dryRun) throw new CliError('dry-run에서는 파일을 내려받지 않습니다.', 'DRY_RUN_WRITE_BLOCKED');
+    if (!this.settings.token || this.settings.token.startsWith('csk_')) throw new CliError('콘텐츠 읽기 권한의 개인 액세스 토큰으로 연결하세요.', 'LOGIN_REQUIRED', 401);
+    const base = new URL(this.settings.baseUrl);
+    if (base.username || base.password || base.search || base.hash || base.pathname !== '/' || base.protocol !== 'https:' && !(base.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname))) throw new CliError('API 원점을 확인하세요.', 'INVALID_URL');
+    const url = new URL(`/v4/creator/public-contents/${contentId}/assets/${assetId}`, base);
+    for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value));
+    let response: Response;
+    try { response = await (this.settings.fetch ?? fetch)(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { Authorization: `Bearer ${this.settings.token}`, Accept: 'image/png,image/jpeg,image/webp', 'X-CLACK-Time-Contract': 'utc-v1',
+        'X-Platform': 'cli', 'x-clack-platform': 'cli', 'X-App-Version': `cli/${VERSION}`, 'Accept-Language': this.settings.lang ?? 'ko', 'User-Agent': `clack-cli/${VERSION}`, 'Cache-Control': 'no-store' } }); }
+    catch { throw new CliError('이미지를 내려받지 못했습니다. 다시 조회해 허가와 버전을 확인하세요.', 'NETWORK_ERROR', 0); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new CliError(`이미지 다운로드가 거절됐습니다 (HTTP ${response.status}). 허가와 버전을 다시 확인하세요.`, 'DOWNLOAD_REJECTED', response.status);
+    }
+    if (response.url && new URL(response.url).origin !== base.origin || response.headers.get('X-CLACK-Time-Contract') !== 'utc-v1') {
+      await response.body?.cancel();
+      throw new CliError('다운로드 원점 또는 시간 계약이 일치하지 않습니다.', 'INVALID_RESPONSE');
+    }
+    return response;
+  }
   async request<T = unknown>(method: string, path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
     rememberSensitiveValues(options.body);
     if (!/^\/(?:v4|platform\/v1)\/[a-zA-Z0-9/@_.-]+$/.test(path) || path.includes('//')

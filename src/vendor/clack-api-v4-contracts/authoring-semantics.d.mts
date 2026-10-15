@@ -19,3 +19,17 @@ export function walkDataSchema(schema: Record<string, unknown>, visit: (node: Re
 export function formFieldLabel(node: unknown, fallback: string, lang?: string, options?: { normalize?: (value: string) => string }): string;
 /** 직전 승인 버전 대비 비공개→공개로 바뀐 루트 키(업로드 422 SKILL_DATA_VISIBILITY_CHANGED, 업그레이드 409 DATA_VISIBILITY_CHANGED). */
 export function inspectDataVisibilityChange(previous: Record<string, unknown> | null | undefined, next: Record<string, unknown>): Array<{ path: string; message: string }>;
+/** 공통 캐릭터 정보 규격 `clack.character.common` v1의 항목 규칙. */
+export interface CharacterCommonRule {
+  kind: 'text' | 'list' | 'chips' | 'rating' | 'image' | 'image_list';
+  visibility: 'public' | 'private';
+  min?: number; max?: number; item_max?: number; required?: boolean; values?: readonly string[];
+}
+/** 공통 캐릭터 정보 규격 v1 표(계약 `_plans/_done/character-chat-multi-template/p1-contract.md` §2.1). 서버·센터 `composeTemplateValues`가 같은 표를 쓴다. */
+export const CHARACTER_COMMON_SPEC: {
+  readonly spec: 'clack.character.common';
+  readonly supported_versions: readonly number[];
+  readonly fields: Readonly<Record<'name' | 'tagline' | 'appearance' | 'personality' | 'speech_style' | 'background' | 'relationship' | 'prohibitions', CharacterCommonRule>>;
+  readonly listing: Readonly<Record<'rating' | 'tags' | 'source_work', CharacterCommonRule>>;
+  readonly images: Readonly<Record<'portrait' | 'cover' | 'gallery', CharacterCommonRule>>;
+};

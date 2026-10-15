@@ -17,7 +17,7 @@ if (!existsSync(mcpSchemasDir)) {
     process.stdout.write(`모노레포 없음(${mcpSchemasDir}) — CLI·MCP 스키마 동기화 확인을 건너뜁니다.\n`);
   }
 } else {
-  for (const name of ['categories', 'product', 'post', 'me', 'channel']) {
+  for (const name of ['categories', 'product', 'post', 'me', 'channel', 'public-content']) {
     const [cli, mcp] = await Promise.all([
       readFile(new URL(`../src/schemas/${name}.ts`, import.meta.url), 'utf8'),
       readFile(resolve(mcpSchemasDir, `${name}.ts`), 'utf8'),
