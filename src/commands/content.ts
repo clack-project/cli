@@ -1,3 +1,4 @@
+import { registerPublicContentCommands } from './public-content.js';
 import { prepareContentThumbnail, uploadContentThumbnail, thumbnailLinkFailure } from '../lib/content-thumbnail.js';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
@@ -133,6 +134,7 @@ const keyId = (value: unknown) => { const id = String(value); if (!/^[1-9][0-9]*
 export function registerContentCommands(program: Command, runtime: Runtime): void {
   // 괄호 안 권한 표기는 서버의 PAT 권한 규칙과 같아야 한다. 서버는 submit에만 write·publish 두 권한을 모두 요구한다.
   const content = program.command('content').description('HTML 콘텐츠 등록·앱 확인·심사 관리 (creator-content:read·write·publish)');
+  registerPublicContentCommands(content, runtime);
   runtime.action(content.command('config').description('콘텐츠 기능 제공 여부·설정 조회 (로그인 불필요)'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/config', { auth: false })));
   runtime.action(content.command('list').description('내 콘텐츠 목록 (creator-content:read)'), async (ctx) => ctx.output(await ctx.api.request('GET', '/v4/creator/contents')));
   runtime.action(content.command('status <id>').description('콘텐츠와 버전별 업로드·심사·공개 상태 (creator-content:read)'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}`)));

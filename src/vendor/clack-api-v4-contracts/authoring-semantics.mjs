@@ -81,6 +81,12 @@ export const SEMANTICS_NOTES = {
   content_ref_import_chain: () => '다른 content_ref 필드로 가져올 수 없습니다.',
   source_without_content_ref: () => 'x-clack-source는 content_ref에만 선언합니다.',
   image_list_declaration: () => 'image_list에는 객체 배열과 자산 선언이 필요합니다.',
+  // 공통 캐릭터 정보 수신 선언(authoring.common, 규격 clack.character.common v1)
+  common_template_only: () => '공통 정보 수신 선언(authoring.common)은 modes에 template이 있고 authoring.editor가 없는 폼 스킬만 쓸 수 있습니다.',
+  common_field_duplicate: () => '한 폼 필드를 두 곳 이상의 공통 정보 항목에 연결할 수 없습니다.',
+  common_visibility_mismatch: () => '연결한 폼 필드의 공개 범위가 규격과 다릅니다(이름·한 줄 소개·목록 정보·이미지·첫 장면은 공개, 나머지 공통 항목은 비공개).',
+  common_widget_mismatch: () => '연결한 폼 필드의 종류(type·x-clack-widget)가 규격과 맞지 않습니다.',
+  common_limit_over: ({ max }) => `연결한 폼 필드의 최대 길이·개수가 규격 상한(${max})을 넘거나 선언되지 않았습니다.`,
 };
 
 /** 스킬 에디터(`authoring.editor`) 선언의 필드 간 관계. `data`는 output.data.schema 파일을 파싱한 객체다(없으면 선언만 본다). */
@@ -115,6 +121,90 @@ function inspectEditorSemantics(skill, data, fail) {
     const field = dataRootField(data, metadata[key]);
     if (!field || !field['x-clack-asset'] || field['x-clack-visibility'] !== 'public') fail(`/output/metadata/${key}`, 'metadata_asset_key');
   }
+}
+
+/**
+ * 공통 캐릭터 정보 규격 `clack.character.common` v1(캐릭터챗 다중 템플릿 계약 `_plans/_done/character-chat-multi-template/p1-contract.md` §2.1·§2.4).
+ * 서버의 `composeTemplateValues`(`src/lib/creator-content-common.ts`)와 센터 사본이 같은 표를 쓰고, 공용 픽스처
+ * `fixtures/character-common/compose.json`의 `spec`이 두 구현의 표를 대조하는 기준이다.
+ * `kind`: text(text·textarea 문자열) / list(문자열 배열 list) / chips(문자열 배열 chips) / rating / image / image_list.
+ * `max`는 문자열 최대 길이, 배열 최대 개수이고 `item_max`는 배열 항목 최대 길이다.
+ */
+export const CHARACTER_COMMON_SPEC = {
+  spec: 'clack.character.common',
+  supported_versions: [1],
+  fields: {
+    name: { kind: 'text', visibility: 'public', min: 1, max: 30, required: true },
+    tagline: { kind: 'text', visibility: 'public', min: 1, max: 60, required: true },
+    appearance: { kind: 'text', visibility: 'private', max: 500 },
+    personality: { kind: 'text', visibility: 'private', max: 1000 },
+    speech_style: { kind: 'text', visibility: 'private', max: 500 },
+    background: { kind: 'text', visibility: 'private', max: 2000 },
+    relationship: { kind: 'text', visibility: 'private', max: 300 },
+    prohibitions: { kind: 'list', visibility: 'private', max: 10, item_max: 60 },
+  },
+  listing: {
+    rating: { kind: 'rating', visibility: 'public', values: ['all', '12', '15'] },
+    tags: { kind: 'chips', visibility: 'public', max: 5, item_max: 12 },
+    source_work: { kind: 'text', visibility: 'public', max: 60 },
+  },
+  images: {
+    portrait: { kind: 'image', visibility: 'public' },
+    cover: { kind: 'image', visibility: 'public' },
+    gallery: { kind: 'image_list', visibility: 'public', max: 6 },
+  },
+};
+
+/** 규격 항목 하나를 대상 폼 필드가 받을 수 있는지 본다. 어긋난 종류 하나를 돌려주고 맞으면 null. */
+function commonFieldProblem(rule, node) {
+  if (node['x-clack-visibility'] !== rule.visibility) return { code: 'common_visibility_mismatch' };
+  const widget = node['x-clack-widget'];
+  const stringItems = node.items?.type === 'string';
+  if (rule.kind === 'text') {
+    if (node.type !== 'string' || !INTRO_TEXT_WIDGETS.has(widget)) return { code: 'common_widget_mismatch' };
+    if (!Number.isSafeInteger(node.maxLength) || node.maxLength > rule.max) return { code: 'common_limit_over', args: { max: rule.max } };
+  } else if (rule.kind === 'list' || rule.kind === 'chips') {
+    if (node.type !== 'array' || widget !== rule.kind || !stringItems) return { code: 'common_widget_mismatch' };
+    if (!Number.isSafeInteger(node.maxItems) || node.maxItems > rule.max) return { code: 'common_limit_over', args: { max: rule.max } };
+    if (!Number.isSafeInteger(node.items.maxLength) || node.items.maxLength > rule.item_max) return { code: 'common_limit_over', args: { max: rule.item_max } };
+  } else if (rule.kind === 'rating') {
+    if (node.type !== 'string' || widget !== 'rating') return { code: 'common_widget_mismatch' };
+  } else if (rule.kind === 'image') {
+    if (node.type !== 'string' || widget !== 'image') return { code: 'common_widget_mismatch' };
+  } else if (rule.kind === 'image_list') {
+    if (node.type !== 'array' || widget !== 'image_list') return { code: 'common_widget_mismatch' };
+    if (!Number.isSafeInteger(node.maxItems) || node.maxItems > rule.max) return { code: 'common_limit_over', args: { max: rule.max } };
+  }
+  return null;
+}
+
+/**
+ * 공통 정보 수신 선언(`authoring.common`)의 필드 관계(계약 §2.4 의미 검사 1~4·6). 5번(템플릿 필수 필드 대 빈 공통 값)은 선언이 아니라
+ * 입력 값의 문제라 `composeTemplateValues`가 `TEMPLATE_REQUIRES_COMMON_FIELD`로 알린다.
+ * - 폼 스킬 전용: `authoring.modes`에 template이 있고 `authoring.editor`가 없어야 한다.
+ * - 대상 필드가 폼에 있고 한 필드가 두 항목(`opening` 포함)에 연결되지 않는다.
+ * - 공개 범위·종류(위젯)·상한이 규격과 맞는다. 대상이 더 큰 값을 받겠다고 선언하면 거부한다(규격보다 큰 값을 받을 방법이 없다).
+ */
+function inspectCommonSemantics(skill, form, fail) {
+  const common = skill.authoring?.common;
+  if (!common) return;
+  if (!skill.authoring?.modes?.includes('template') || skill.authoring?.editor) fail('/authoring/common', 'common_template_only');
+  if (!form) return;
+  const properties = form.properties ?? {};
+  const used = new Map();
+  const check = (path, name, rule) => {
+    if (typeof name !== 'string') return;
+    const node = Object.hasOwn(properties, name) ? properties[name] : null;
+    if (!node || typeof node !== 'object') { fail(path, 'form_field_missing'); return; }
+    if (used.has(name)) fail(path, 'common_field_duplicate');
+    used.set(name, path);
+    const problem = commonFieldProblem(rule, node);
+    if (problem) fail(path, problem.code, problem.args);
+  };
+  for (const [section, rules] of [['fields', CHARACTER_COMMON_SPEC.fields], ['listing', CHARACTER_COMMON_SPEC.listing], ['images', CHARACTER_COMMON_SPEC.images]]) {
+    for (const [key, rule] of Object.entries(rules)) check(`/authoring/common/${section}/${key}`, common[section]?.[key], rule);
+  }
+  check('/authoring/common/opening', common.opening, { kind: 'text', visibility: 'public', max: Number.MAX_SAFE_INTEGER });
 }
 
 /** 콘텐츠 인트로 한도(인트로 계획 _plans/_done/creator-content-intro-plan.md §3.2·§3.9, U2·U3). 서버 `src/lib/creator-content-intro.ts`와 같은 값이다. */
@@ -235,6 +325,7 @@ export function inspectAuthoringSemantics(skill, form, data) {
     }
   }
   inspectIntroSemantics(skill, form, slots, fail);
+  inspectCommonSemantics(skill, form, fail);
   if (!form) return errors;
   const properties = form.properties ?? {};
   const exists = (expression, path) => {
