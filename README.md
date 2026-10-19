@@ -356,7 +356,7 @@ clack page restore PAGE_ID PREVIOUS_VERSION_ID --revision 1
 clack page disable PAGE_ID --revision 2
 ```
 
-모든 콘텐츠와 페이지는 기본으로 숨겨진 공통 메뉴를 세 손가락 탭으로 켜고 끈다. 제작자는 메뉴 종류를 고르지 않고 `light`·`dark` 색상만 정한다. `--header`와 저장된 `header_mode`의 다섯 값(`fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close`, `floating_close_safe_area`)은 호환용이며 메뉴 동작을 바꾸지 않는다. 새 업로드에서 `--header`를 생략하면 `fixed`를 저장한다. 파일과 표시 설정은 한 버전으로 저장하므로 색상 설정만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
+커스텀 페이지는 기본으로 숨겨진 공통 메뉴를 세 손가락 탭으로 켜고 끈다. 제작자는 메뉴 종류를 고르지 않고 `light`·`dark` 색상만 정한다. `--header`와 저장된 `header_mode`의 다섯 값(`fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close`, `floating_close_safe_area`)은 호환용이며 메뉴 동작을 바꾸지 않는다. 새 업로드에서 `--header`를 생략하면 `fixed`를 저장한다. 파일과 표시 설정은 한 버전으로 저장하므로 색상 설정만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
 
 페이지 파일을 유지하고 색상만 바꾸려면 `clack page presentation`에 원본 `header_mode`를 그대로 전달한다. 현재 CLI는 기존 다섯 값을 모두 받으며 `--header`와 `--color`가 필수다. 아래는 원본 값이 `fixed`인 예시다. 원본이 다르면 그 값을 사용하고, 구버전 CLI가 받지 못하면 CLI를 업데이트하거나 MCP/REST로 보존한다. 새 비공개 버전이 만들어지며 응답의 새 버전 ID로 앱 확인과 심사를 다시 진행한다. 기존 적용본은 유지된다.
 
@@ -389,3 +389,15 @@ clack page status PAGE_ID
 크리에이터 센터·가이드는 `/ko`·`/en` 주소를 사용하며 로그인 상태에서는 앱 언어 설정을 따릅니다. 콘텐츠는 SDK 1.2.0의 `clack.locale` 또는 `window.__clack_env?.locale`에서 앱 언어(`language`)·기기 지역(`region`)·BCP 47 태그(`tag`)를 동기적으로 읽습니다. 번역은 `language`로 고르고 숫자·날짜는 `tag`를 `Intl`에 전달합니다. 기존 `me().locale`은 `ko|en`이고 `me().locale_tag`가 전체 태그입니다.
 
 새 다국어 계약은 개발 센터와 최신 staging 테스터 앱에서 제공하며, 운영에서는 센터 초기 출시와 함께 별도로 활성화합니다. 상세 계약과 예제는 개발 센터의 가이드 P11(`/ko/guide/reference/platform/multilingual-content`)을 확인하세요. 앱 언어 환경값이 없는 구버전 앱에서는 `clack.locale.source`가 `browser`이며 브라우저 언어로 대체됩니다.
+
+## 콘텐츠 헤더 표시 (0.3.5)
+
+`clack content create`와 `clack content update <id>`에 `--header-visibility always|gesture|auto`를 지정합니다. `always`는 좋아요·댓글이 있는 헤더를 항상 표시하고, `gesture`는 세 손가락 탭으로 표시·숨김을 전환합니다. `auto`는 `header_visibility: null`을 보내 기본값으로 복원합니다. 생략하면 생성은 기본값, 수정은 현재 설정을 유지합니다.
+
+```sh
+clack content update <콘텐츠-UUID> --header-visibility always --json
+clack content update <콘텐츠-UUID> --header-visibility gesture --json
+clack content update <콘텐츠-UUID> --header-visibility auto --json
+```
+
+미설정 콘텐츠는 인트로 진입 시 탭 전환, 인트로 없이 바로 열릴 때 상시 표시합니다. 기존 콘텐츠도 같은 기본값을 적용합니다. 설정만 수정하면 다음 실행부터 적용되며 콘텐츠 revision·버전·심사 상태는 바뀌지 않습니다. `content status`의 `header_visibility`로 저장값을 확인합니다. `--header`는 버전의 예전 표시 계약을 보존하는 별도 호환 인자입니다. 커스텀 페이지는 계속 세 손가락 탭 메뉴를 사용합니다.

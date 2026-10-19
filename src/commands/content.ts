@@ -19,6 +19,7 @@ const createSchema = z.object({
   kind: z.enum(['html', 'gallery', 'slideshow', 'video']).default('html'),
   policy_version: z.literal('2026-09-22'),
   thumbnail_id: z.uuid().nullable().optional(),
+  header_visibility: z.enum(['always', 'gesture']).nullable().optional(),
 }).strict();
 
 /**
@@ -36,6 +37,7 @@ export const updateSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   kind: z.enum(['html', 'gallery', 'slideshow', 'video']).optional(),
   thumbnail_id: z.uuid().nullable().optional(),
+  header_visibility: z.enum(['always', 'gesture']).nullable().optional(),
   metadata_mode: z.enum(['single', 'localized']).optional(),
   metadata_lang: z.enum(METADATA_LANGS).nullable().optional(),
   localized_metadata: z.partialRecord(z.enum(METADATA_LANGS), localizedEntry).nullable().optional(),
@@ -140,15 +142,17 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
   runtime.action(content.command('status <id>').description('콘텐츠와 버전별 업로드·심사·공개 상태 (creator-content:read)'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}`)));
   runtime.action(content.command('create').description('콘텐츠 초안 등록 (creator-content:write)').requiredOption('--title <text>', '제목').option('--description <text>', '설명', '')
     .option('--kind <kind>', 'html|gallery|slideshow|video', 'html').requiredOption('--policy-version <version>', '동의한 콘텐츠 제공 정책 버전')
+    .addOption(new Option('--header-visibility <mode>', '헤더: always(상시), gesture(세 손가락 탭), auto(인트로 기준)').choices(['always', 'gesture', 'auto']))
     .addOption(new Option('--thumbnail-file <file>', '로컬 썸네일 이미지 업로드 후 연결').conflicts('thumbnailId'))
     .addOption(new Option('--thumbnail-id <uuid|none>', '발급받은 썸네일 ID 또는 기본 이미지').conflicts('thumbnailFile')), async (ctx, _args, opts) => {
-    const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion, thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId });
+    const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion, header_visibility: opts.headerVisibility === undefined ? undefined : opts.headerVisibility === 'auto' ? null : opts.headerVisibility, thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId });
     await saveWithThumbnail(ctx, 'POST', '/v4/creator/contents', body, opts.thumbnailFile);
   });
   runtime.action(content.command('update <id>').description('콘텐츠 정보(제목·설명·종류·썸네일·메타데이터·태그) 수정 (creator-content:write)')
     .option('--title <text>', '제목 (120자 이하, 빈 값이면 제목 없음)').option('--description <text>', '설명 (2000자 이하)')
     .addOption(new Option('--kind <kind>', '콘텐츠 종류').choices(['html', 'gallery', 'slideshow', 'video']))
     .addOption(new Option('--thumbnail-id <uuid|none>', '썸네일 작업 ID, none이면 기본 이미지로 되돌림').conflicts('thumbnailFile'))
+    .addOption(new Option('--header-visibility <mode>', '헤더: always(상시), gesture(세 손가락 탭), auto(인트로 기준)').choices(['always', 'gesture', 'auto']))
     .addOption(new Option('--thumbnail-file <file>', '로컬 썸네일 이미지 업로드 후 연결').conflicts('thumbnailId'))
     .addOption(new Option('--metadata-mode <mode>', '메타데이터 입력 방식').choices(['single', 'localized']))
     .option('--metadata-lang <ko|en|none>', '대표 언어')
@@ -157,6 +161,7 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     const body = parse(updateSchema, {
       title: opts.title, description: opts.description, kind: opts.kind,
       thumbnail_id: opts.thumbnailFile ? null : opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId,
+      header_visibility: opts.headerVisibility === undefined ? undefined : opts.headerVisibility === 'auto' ? null : opts.headerVisibility,
       metadata_mode: opts.metadataMode,
       metadata_lang: opts.metadataLang === undefined ? undefined : opts.metadataLang === 'none' ? null : opts.metadataLang,
       localized_metadata: opts.localizedMetadata === undefined ? undefined : jsonOption('--localized-metadata', opts.localizedMetadata),
