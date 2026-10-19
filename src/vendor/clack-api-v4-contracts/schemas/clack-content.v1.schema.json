@@ -26,7 +26,8 @@
           "ai.conversation",
           "ai.completion",
           "cash.purchase",
-          "ai.image"
+          "ai.image",
+          "media.image"
         ]
       },
       "uniqueItems": true

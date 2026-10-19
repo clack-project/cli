@@ -390,7 +390,7 @@ clack page status PAGE_ID
 
 새 다국어 계약은 개발 센터와 최신 staging 테스터 앱에서 제공하며, 운영에서는 센터 초기 출시와 함께 별도로 활성화합니다. 상세 계약과 예제는 개발 센터의 가이드 P11(`/ko/guide/reference/platform/multilingual-content`)을 확인하세요. 앱 언어 환경값이 없는 구버전 앱에서는 `clack.locale.source`가 `browser`이며 브라우저 언어로 대체됩니다.
 
-## 콘텐츠 헤더 표시 (0.3.5)
+## 콘텐츠 헤더 표시 (0.3.6)
 
 `clack content create`와 `clack content update <id>`에 `--header-visibility always|gesture|auto`를 지정합니다. `always`는 좋아요·댓글이 있는 헤더를 항상 표시하고, `gesture`는 세 손가락 탭으로 표시·숨김을 전환합니다. `auto`는 `header_visibility: null`을 보내 기본값으로 복원합니다. 생략하면 생성은 기본값, 수정은 현재 설정을 유지합니다.
 
@@ -400,4 +400,4 @@ clack content update <콘텐츠-UUID> --header-visibility gesture --json
 clack content update <콘텐츠-UUID> --header-visibility auto --json
 ```
 
-미설정 콘텐츠는 인트로 진입 시 탭 전환, 인트로 없이 바로 열릴 때 상시 표시합니다. 기존 콘텐츠도 같은 기본값을 적용합니다. 설정만 수정하면 다음 실행부터 적용되며 콘텐츠 revision·버전·심사 상태는 바뀌지 않습니다. `content status`의 `header_visibility`로 저장값을 확인합니다. `--header`는 버전의 예전 표시 계약을 보존하는 별도 호환 인자입니다. 커스텀 페이지는 계속 세 손가락 탭 메뉴를 사용합니다.
+미설정 콘텐츠는 인트로 유무와 관계없이 세 손가락 탭을 사용합니다. 인트로 없는 일러스트·글에는 본문과 제목 사이에 좋아요·댓글 수와 버튼을 추가로 표시합니다. 기존 콘텐츠도 같은 기본값을 적용합니다. 설정만 수정하면 다음 실행부터 적용되며 콘텐츠 revision·버전·심사 상태는 바뀌지 않습니다. `content status`의 `header_visibility`로 저장값을 확인합니다. `--header`는 버전의 예전 표시 계약을 보존하는 별도 호환 인자입니다. 커스텀 페이지는 계속 세 손가락 탭 메뉴를 사용합니다.
