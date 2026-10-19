@@ -345,7 +345,7 @@ clack mcp config --platform --codex --env dev
 clack page create --target profile --policy-version 2026-09-22
 clack page create --target space --space-id WORLD_ID --policy-version 2026-09-22
 clack page list
-clack page upload PAGE_ID page.html --header translucent_scroll_hide --color dark
+clack page upload PAGE_ID page.html --color dark
 clack page preview PAGE_ID VERSION_ID
 # 앱에서 같은 계정으로 열고 확인 완료 후 제출
 clack page submit PAGE_ID VERSION_ID
@@ -356,20 +356,20 @@ clack page restore PAGE_ID PREVIOUS_VERSION_ID --revision 1
 clack page disable PAGE_ID --revision 2
 ```
 
-헤더는 `fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close`(전체 화면, 화면 끝까지), `floating_close_safe_area`(전체 화면, 안전 영역 안쪽) 중 선택한다. 파일과 헤더를 한 버전으로 저장하므로 헤더만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
+모든 콘텐츠와 페이지는 기본으로 숨겨진 공통 메뉴를 세 손가락 탭으로 켜고 끈다. 제작자는 메뉴 종류를 고르지 않고 `light`·`dark` 색상만 정한다. `--header`와 저장된 `header_mode`의 다섯 값(`fixed`, `scroll_hide`, `translucent_scroll_hide`, `floating_close`, `floating_close_safe_area`)은 호환용이며 메뉴 동작을 바꾸지 않는다. 새 업로드에서 `--header`를 생략하면 `fixed`를 저장한다. 파일과 표시 설정은 한 버전으로 저장하므로 색상 설정만 바뀌어도 앱 확인·심사가 필요하다. 승인만으로 자동 적용되지 않으며 복원도 최신 수정 번호가 필요하다. 충돌 시 `status`를 다시 읽고 의도한 버전을 확인한다. 기본 화면 전환은 파일을 삭제하지 않는다. 업로드 완료 요청만 실패하면 오류에 표시된 `clack page complete PAGE_ID UPLOAD_ID`로 재시도할 수 있다.
 
-페이지 파일은 유지하고 헤더만 바꾸려면 `clack page presentation PAGE_ID VERSION_ID --header scroll_hide --color light`를 사용합니다. 새 비공개 버전이 만들어지며 응답의 새 버전 ID로 앱 확인과 심사를 다시 진행합니다. 기존 적용본은 유지됩니다.
+페이지 파일을 유지하고 색상만 바꾸려면 `clack page presentation`에 원본 `header_mode`를 그대로 전달한다. 현재 CLI는 기존 다섯 값을 모두 받으며 `--header`와 `--color`가 필수다. 아래는 원본 값이 `fixed`인 예시다. 원본이 다르면 그 값을 사용하고, 구버전 CLI가 받지 못하면 CLI를 업데이트하거나 MCP/REST로 보존한다. 새 비공개 버전이 만들어지며 응답의 새 버전 ID로 앱 확인과 심사를 다시 진행한다. 기존 적용본은 유지된다.
 
 ```sh
-clack page presentation PAGE_ID SOURCE_VERSION_ID --header scroll_hide --color light
-# 응답 data.id의 새 UUID로 이후 절차를 진행합니다.
+clack page presentation PAGE_ID SOURCE_VERSION_ID --header fixed --color dark
+# 응답 data.id의 새 UUID로 이후 절차를 진행한다.
 clack page preview PAGE_ID NEW_VERSION_ID
-# 새 버전을 앱에서 확인 완료한 뒤
+# 앱에서 세 손가락으로 메뉴를 열고 ✓로 새 버전 확인을 완료한 뒤
 clack page submit PAGE_ID NEW_VERSION_ID
 clack page status PAGE_ID
 ```
 
-`presentation`은 재호출하면 다른 버전을 만들므로 응답이 유실되면 `status`의 버전 이력을 먼저 확인한다. 같은 업로드를 확정하는 `complete`의 멱등 재시도와 구분한다. 파일은 재사용해도 새 버전은 일일 업로드·논리 저장 한도에 포함된다. 외부 MCP에서도 `revise_custom_page_presentation`으로 같은 작업을 수행한다. 헤더 값과 화면 표시·안전 영역 규칙은 스킬 저장소의 [페이지 헤더·화면 표시 규칙](https://github.com/clack-project/skills/blob/main/clack-page/references/presentation.md)을 참고한다.
+`presentation`은 재호출하면 다른 버전을 만들므로 응답이 유실되면 `status`의 버전 이력을 먼저 확인한다. 같은 업로드를 확정하는 `complete`의 멱등 재시도와 구분한다. 파일은 재사용해도 새 버전은 일일 업로드·논리 저장 한도에 포함된다. 외부 MCP에서도 `revise_custom_page_presentation`으로 같은 작업을 수행한다. 공통 메뉴와 화면 표시·안전 영역 규칙은 스킬 저장소의 [페이지 메뉴·화면 표시 규칙](https://github.com/clack-project/skills/blob/main/clack-page/references/presentation.md)을 참고한다.
 
 ### 이미지 화보·캐릭터 가져오기 제작
 
