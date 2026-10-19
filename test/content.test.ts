@@ -192,12 +192,18 @@ test('content update·info-version은 PATCH·POST 경로와 서버 본문 규칙
     '--localized-metadata', '{"en":{"title":"Title","description":"About"}}');
   await run('content', 'update', contentId, '--tags', '');
   await run('content', 'update', contentId, '--title', '  ');
+  await run('content', 'update', contentId, '--header-visibility', 'always');
+  await run('content', 'update', contentId, '--header-visibility', 'gesture');
+  await run('content', 'update', contentId, '--header-visibility', 'auto');
   await run('content', 'info-version', contentId, versionId);
   assert.deepEqual(calls, [
     { call: `PATCH ${root}`, body: { title: '새 제목', description: '', thumbnail_id: null, tags: ['#여행', 'travel'] } },
     { call: `PATCH ${root}`, body: { metadata_mode: 'localized', metadata_lang: 'ko', localized_metadata: { en: { title: 'Title', description: 'About' } } } },
     { call: `PATCH ${root}`, body: { tags: [] } },
     { call: `PATCH ${root}`, body: { title: '' } },
+    { call: `PATCH ${root}`, body: { header_visibility: 'always' } },
+    { call: `PATCH ${root}`, body: { header_visibility: 'gesture' } },
+    { call: `PATCH ${root}`, body: { header_visibility: null } },
     { call: `POST ${root}/versions/${versionId}/info-version`, body: undefined },
   ]);
   assert.equal(confirmations.length, 1);
