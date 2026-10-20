@@ -401,3 +401,24 @@ clack content update <콘텐츠-UUID> --header-visibility auto --json
 ```
 
 미설정 콘텐츠는 인트로 유무와 관계없이 세 손가락 탭을 사용합니다. 인트로 없는 일러스트·글에는 본문과 제목 사이에 좋아요·댓글 수와 버튼을 추가로 표시합니다. 기존 콘텐츠도 같은 기본값을 적용합니다. 설정만 수정하면 다음 실행부터 적용되며 콘텐츠 revision·버전·심사 상태는 바뀌지 않습니다. `content status`의 `header_visibility`로 저장값을 확인합니다. `--header`는 버전의 예전 표시 계약을 보존하는 별도 호환 인자입니다. 커스텀 페이지는 계속 세 손가락 탭 메뉴를 사용합니다.
+
+## 한영 콘텐츠와 선택 버전 ZIP (0.3.7)
+
+`content create/update --target-langs ko,en`은 본문 지원 언어를 지정한다. 해당 언어 목록에서 우선 노출하며 다른 언어 이용자의 직접 접근을 막지 않는다. 번역은 자동으로 생기지 않는다.
+
+`--localized-metadata`는 추가 언어의 제목·설명·태그·썸네일 작업 ID·원작 표기를 받으며 전체 교체다. 생략한 PATCH 필드는 유지한다. `--expected-revision`으로 조회 후 동시 변경을 차단할 수 있다.
+
+```sh
+clack content update CONTENT_ID --metadata-mode localized --metadata-lang ko \
+  --target-langs ko,en --localized-metadata '{"en":{"title":"My story","description":"A new story","tags":["story"],"source_work":"Original title","source_credit":"Source credit"}}'
+clack content thumbnail cover-en.png --content CONTENT_ID --lang en
+clack content thumbnail-generate --title 'My story' --description 'A quiet forest' --content CONTENT_ID --approved-price 100
+clack content thumbnail-status THUMBNAIL_ID
+clack content export CONTENT_ID VERSION_ID --out edited-source.zip
+clack content language-stats CONTENT_ID
+clack content intro CONTENT_ID --json intro.json
+```
+
+생성 요금은 현재 설정을 조회해 동의한 값만 지정한다. 생성된 썸네일 ID도 추가 언어의 `thumbnail_id`에 연결한다. `intro.json`은 기존 소개 전체와 `localized` 문구를 포함해야 한다.
+
+`content export`는 본인 선택 버전의 코드·정적 자산·매니페스트·프로필 YAML을 저장한다. 공개 이미지 재사용 명령인 `content download`와 별개다. 30 MiB 이하이며 비공개 설정이 필요한 버전은 지원하지 않는다. 5분 유효 주소에서 받은 ZIP의 크기·SHA-256을 검증한 뒤 새 파일에만 쓴다. 기존 파일을 덮어쓰지 않는다. 사진·대화·실행 저장값·토큰은 내보내지 않는다.
