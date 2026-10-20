@@ -1,3 +1,4 @@
+import { downloadCreatorExport } from '../lib/content-export.js';
 import { registerPublicContentCommands } from './public-content.js';
 import { prepareContentThumbnail, uploadContentThumbnail, thumbnailLinkFailure } from '../lib/content-thumbnail.js';
 import { createHash } from 'node:crypto';
@@ -13,14 +14,7 @@ import { inspectContentPackage } from '../lib/content-package.js';
 
 const MAX_BYTES = 30 * 1024 * 1024;
 const uuid = (value: unknown): string => parse(z.uuid(), value);
-const createSchema = z.object({
-  title: z.string().trim().min(1).max(120),
-  description: z.string().trim().max(2000).default(''),
-  kind: z.enum(['html', 'gallery', 'slideshow', 'video']).default('html'),
-  policy_version: z.literal('2026-09-22'),
-  thumbnail_id: z.uuid().nullable().optional(),
-  header_visibility: z.enum(['always', 'gesture']).nullable().optional(),
-}).strict();
+
 
 /**
  * 서버 `creatorContentUpdateSchema`(PATCH /v4/creator/contents/:id)와 필드·길이를 맞춘 사본이다.
@@ -31,6 +25,10 @@ const TAG_PATTERN = /^[\p{L}\p{M}\p{N}_]{1,30}$/u;
 const localizedEntry = z.object({
   title: z.string().trim().max(120),
   description: z.string().trim().max(2000).optional(),
+  tags: z.array(z.string().max(64)).max(50).optional(),
+  thumbnail_id: z.uuid().nullable().optional(),
+  source_work: z.string().max(200).nullable().optional(),
+  source_credit: z.string().max(2000).nullable().optional(),
 }).strict();
 export const updateSchema = z.object({
   title: z.string().trim().max(120).optional(),
@@ -38,6 +36,8 @@ export const updateSchema = z.object({
   kind: z.enum(['html', 'gallery', 'slideshow', 'video']).optional(),
   thumbnail_id: z.uuid().nullable().optional(),
   header_visibility: z.enum(['always', 'gesture']).nullable().optional(),
+  expected_revision: z.number().int().min(0).optional(),
+  target_langs: z.array(z.enum(METADATA_LANGS)).max(2).optional(),
   metadata_mode: z.enum(['single', 'localized']).optional(),
   metadata_lang: z.enum(METADATA_LANGS).nullable().optional(),
   localized_metadata: z.partialRecord(z.enum(METADATA_LANGS), localizedEntry).nullable().optional(),
@@ -67,6 +67,11 @@ export const updateSchema = z.object({
     }
     if (value.metadata_mode === 'single' && Object.keys(value.localized_metadata).length) issue('한 언어(single)로 입력할 때는 언어별 값을 보낼 수 없습니다.');
   }
+});
+
+const createSchema = updateSchema.safeExtend({
+  title: z.string().trim().min(1).max(120), description: z.string().trim().max(2000).default(''),
+  kind: z.enum(['html', 'gallery', 'slideshow', 'video']).default('html'), policy_version: z.literal('2026-09-22'),
 });
 
 /** JSON 옵션 값을 읽는다. `none`은 null(해제)이다. */
@@ -144,8 +149,12 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     .option('--kind <kind>', 'html|gallery|slideshow|video', 'html').requiredOption('--policy-version <version>', '동의한 콘텐츠 제공 정책 버전')
     .addOption(new Option('--header-visibility <mode>', '헤더: always(상시), gesture(세 손가락 탭), auto(기본 세 손가락 탭)').choices(['always', 'gesture', 'auto']))
     .addOption(new Option('--thumbnail-file <file>', '로컬 썸네일 이미지 업로드 후 연결').conflicts('thumbnailId'))
-    .addOption(new Option('--thumbnail-id <uuid|none>', '발급받은 썸네일 ID 또는 기본 이미지').conflicts('thumbnailFile')), async (ctx, _args, opts) => {
-    const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion, header_visibility: opts.headerVisibility === undefined ? undefined : opts.headerVisibility === 'auto' ? null : opts.headerVisibility, thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId });
+    .addOption(new Option('--thumbnail-id <uuid|none>', '발급받은 썸네일 ID 또는 기본 이미지').conflicts('thumbnailFile'))
+    .option('--target-langs <languages>', '본문 지원 언어: ko,en')
+    .option('--metadata-mode <mode>', 'single 또는 localized')
+    .option('--metadata-lang <language>', '대표 언어: ko 또는 en')
+    .option('--localized-metadata <json>', '언어별 제목·설명·태그·썸네일·원작 표기 JSON'), async (ctx, _args, opts) => {
+    const body = parse(createSchema, { title: opts.title, description: opts.description, kind: opts.kind, policy_version: opts.policyVersion, target_langs: opts.targetLangs === undefined ? undefined : csv(opts.targetLangs), metadata_mode: opts.metadataMode, metadata_lang: opts.metadataLang, localized_metadata: opts.localizedMetadata === undefined ? undefined : jsonOption('--localized-metadata', opts.localizedMetadata), header_visibility: opts.headerVisibility === undefined ? undefined : opts.headerVisibility === 'auto' ? null : opts.headerVisibility, thumbnail_id: opts.thumbnailId === undefined ? undefined : opts.thumbnailId === 'none' ? null : opts.thumbnailId });
     await saveWithThumbnail(ctx, 'POST', '/v4/creator/contents', body, opts.thumbnailFile);
   });
   runtime.action(content.command('update <id>').description('콘텐츠 정보(제목·설명·종류·썸네일·메타데이터·태그) 수정 (creator-content:write)')
@@ -156,6 +165,8 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     .addOption(new Option('--thumbnail-file <file>', '로컬 썸네일 이미지 업로드 후 연결').conflicts('thumbnailId'))
     .addOption(new Option('--metadata-mode <mode>', '메타데이터 입력 방식').choices(['single', 'localized']))
     .option('--metadata-lang <ko|en|none>', '대표 언어')
+    .option('--expected-revision <number>', '조회한 콘텐츠 revision과 다르면 변경 거절')
+    .option('--target-langs <languages>', '본문 지원 언어: ko,en (다른 언어 접근은 차단하지 않음)')
     .option('--localized-metadata <json|none>', '대표 언어 외 언어별 제목·설명 JSON, 예: \'{"en":{"title":"Title","description":"About"}}\'')
     .option('--tags <list>', '해시태그를 쉼표로 구분해 통째 교체, 빈 문자열이면 모두 삭제'), async (ctx, [id], opts) => {
     const body = parse(updateSchema, {
@@ -164,20 +175,35 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
       header_visibility: opts.headerVisibility === undefined ? undefined : opts.headerVisibility === 'auto' ? null : opts.headerVisibility,
       metadata_mode: opts.metadataMode,
       metadata_lang: opts.metadataLang === undefined ? undefined : opts.metadataLang === 'none' ? null : opts.metadataLang,
+      expected_revision: opts.expectedRevision === undefined ? undefined : Number(opts.expectedRevision),
+      target_langs: opts.targetLangs === undefined ? undefined : csv(opts.targetLangs),
       localized_metadata: opts.localizedMetadata === undefined ? undefined : jsonOption('--localized-metadata', opts.localizedMetadata),
       tags: opts.tags === undefined ? undefined : csv(opts.tags),
     });
     await saveWithThumbnail(ctx, 'PATCH', `/v4/creator/contents/${uuid(id)}`, body, opts.thumbnailFile, uuid(id));
   });
   runtime.action(content.command('thumbnail <file>').description('로컬 썸네일 업로드와 선택적 콘텐츠 연결 (creator-content:write)')
-    .option('--content <uuid>', '업로드 후 이 콘텐츠에 연결'), async (ctx, [file], opts) => {
+    .option('--content <uuid>', '업로드 후 이 콘텐츠에 연결').addOption(new Option('--lang <language>', '추가 언어의 썸네일로 연결').choices(['ko', 'en'])), async (ctx, [file], opts) => {
     const contentId = opts.content === undefined ? undefined : uuid(opts.content);
+    if (opts.lang && !contentId) throw new CliError('--lang은 --content와 함께 사용하세요.');
     const image = await prepareContentThumbnail(ctx, file);
     if (ctx.options.dryRun) { ctx.output({ dry_run: true, path: '/v4/creator/thumbnails', file: image.path, byte_size: image.bytes.length, ...(contentId ? { content_id: contentId } : {}) }); return; }
     const uploaded = await uploadContentThumbnail(ctx, image);
     if (!contentId) { ctx.output(uploaded); return; }
     try {
-      const result = await ctx.api.request('PATCH', `/v4/creator/contents/${contentId}`, { body: { thumbnail_id: uploaded.data.id } });
+      let body: Record<string, unknown> = { thumbnail_id: uploaded.data.id };
+      if (opts.lang) {
+        const current = await ctx.api.request<{ metadata_lang?: string; revision: number; localized_metadata?: Record<string, Record<string, unknown>> }>('GET', `/v4/creator/contents/${contentId}`);
+        if (current.data.metadata_lang !== opts.lang) {
+          const localized = Object.fromEntries(Object.entries(current.data.localized_metadata ?? {}).map(([lang, value]) => {
+            const { thumbnail_url: _url, ...entry } = value; return [lang, entry];
+          }));
+          if (!localized[opts.lang]) throw new CliError('이 언어의 제목·설명을 먼저 등록하세요. 업로드 ID는 상태 조회로 복구할 수 있습니다.');
+          localized[opts.lang] = { ...localized[opts.lang], thumbnail_id: uploaded.data.id };
+          body = { localized_metadata: localized, expected_revision: current.data.revision };
+        }
+      }
+      const result = await ctx.api.request('PATCH', `/v4/creator/contents/${contentId}`, { body });
       ctx.output({ ...result, thumbnail: uploaded.data });
     } catch (failure) { throw thumbnailLinkFailure(ctx, failure, uploaded.data.id, contentId); }
   });
@@ -208,6 +234,26 @@ export function registerContentCommands(program: Command, runtime: Runtime): voi
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/review/cancel`, undefined, '이 버전의 심사를 취소할까요?'));
   // 정보(제목·설명·썸네일·메타데이터·인트로)만 바꾼 새 버전을 만든다. 승인·반려된 버전이 원본이고 번들은 재사용한다.
   // 서버가 201(새로 생성)·200(같은 정보의 미게시 버전: 초안·심사 중·승인 미게시)으로 구분해 응답의 created로 알려 준다. 앱 확인·심사는 새 버전에서 다시 받는다.
+  runtime.action(content.command('export <id> <version-id>').description('본인 선택 버전의 코드·자산·프로필 ZIP 내려받기 (creator-content:read)')
+    .requiredOption('--out <file>', '저장할 새 ZIP 파일 경로'), async (ctx, [id, versionId], opts) => {
+      const path = `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/export`;
+      if (ctx.options.dryRun) { ctx.output({ dry_run: true, method: 'POST', path, output: resolve(opts.out) }); return; }
+      const result = await ctx.api.request<{ download_url: string; byte_size: number; sha256: string }>('POST', path, { body: {} });
+      rememberSecret(result.data.download_url);
+      ctx.output(await downloadCreatorExport(result.data, opts.out));
+    });
+  runtime.action(content.command('language-stats <id>').description('요청·표시·본문 언어별 이용 집계 (creator-content:read)'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/contents/${uuid(id)}/language-stats`)));
+  runtime.action(content.command('intro <id>').description('소개·코멘트 전체 교체 (creator-content:write)').requiredOption('--json <file>', '소개 JSON 파일'), async (ctx, [id], opts) => {
+    const body = JSON.parse(await readFile(resolve(opts.json), 'utf8')) as unknown;
+    await mutate(ctx, 'PUT', `/v4/creator/contents/${uuid(id)}/intro`, body);
+  });
+  runtime.action(content.command('thumbnail-generate').description('제목·설명으로 썸네일 작업 생성 (creator-content:write)')
+    .option('--title <text>', '선택 언어 제목').option('--description <text>', '선택 언어 설명').option('--content <id>', '본인 콘텐츠 ID')
+    .option('--approved-price <cash>', '동의한 현재 생성 요금'), async (ctx, _args, opts) => {
+      await mutate(ctx, 'POST', '/v4/creator/thumbnails/generate', { title: opts.title, description: opts.description,
+        ...(opts.content ? { content_id: uuid(opts.content) } : {}), ...(opts.approvedPrice ? { approved_price_cash: Number(opts.approvedPrice) } : {}) });
+    });
+  runtime.action(content.command('thumbnail-status <id>').description('썸네일 작업 결과 조회 (creator-content:read)'), async (ctx, [id]) => ctx.output(await ctx.api.request('GET', `/v4/creator/thumbnails/${uuid(id)}`)));
   runtime.action(content.command('info-version <id> <version-id>').description('바뀐 콘텐츠 정보만 담은 새 버전 생성 (creator-content:write)'), async (ctx, [id, versionId]) =>
     mutate(ctx, 'POST', `/v4/creator/contents/${uuid(id)}/versions/${uuid(versionId)}/info-version`, undefined,
       '현재 콘텐츠 정보로 이 버전을 복제한 새 초안을 만들까요? 새 버전은 앱 확인과 심사를 다시 받아야 합니다.'));
