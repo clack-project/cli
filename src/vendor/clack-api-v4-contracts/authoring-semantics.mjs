@@ -98,6 +98,7 @@ function inspectEditorSemantics(skill, data, fail) {
   if (permissions.has('ai.suggest') && skill.authoring?.ai_fill?.enabled !== true) fail('/authoring/editor/permissions', 'ai_suggest_needs_ai_fill');
   const imageTool = (skill.authoring?.tools ?? []).find((tool) => tool.tool === 'image.generate');
   if (permissions.has('tools.image.generate') && !imageTool) fail('/authoring/editor/permissions', 'image_permission_needs_tool');
+  if (editor.form_binding?.version === 1) return;
   if (imageTool?.aspect === 'slot') fail('/authoring/tools', 'editor_slot_aspect');
   if (!data) return;
   let assets = 0;

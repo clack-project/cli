@@ -3,7 +3,7 @@ import { walkDataSchema } from './authoring-semantics.mjs';
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 const fail = (path, message) => ({ path, message });
 // 스킬 에디터 데이터 문서 스키마(output-data.v1). 메타 스키마로 표현할 수 없는 깊이·필수 상한·판별자·참조·비공개 경계를 검사한다.
-export const OUTPUT_DATA_LIMITS = { schema_bytes: 65536, depth: 6, properties: 400, public_bytes: 262144, private_bytes: 65536, ui_state_bytes: 262144 };
+export const OUTPUT_DATA_LIMITS = { schema_bytes: 65536, depth: 6, public_bytes: 262144, private_bytes: 65536, ui_state_bytes: 262144 };
 // v1은 데이터 스키마의 pattern을 허용하지 않는다(메타 스키마가 거부, 백트래킹 DoS 방지). uniqueItems는 스칼라 배열에만 쓴다.
 const SCALAR_TYPES = new Set(['string', 'integer', 'number', 'boolean']);
 const SCALAR_KEYS = { string: ['minLength', 'maxLength', 'format'], number: ['minimum', 'maximum'], integer: ['minimum', 'maximum'],
@@ -52,7 +52,6 @@ export function inspectOutputData(schema) {
   if (!Object.values(schema.properties).some((field) => field['x-clack-visibility'] === 'public')) note('/properties', 'public_root_key_missing');
   const defs = schema.$defs ?? {};
   const resolve = (node) => typeof node?.$ref === 'string' ? defs[node.$ref.slice('#/$defs/'.length)] : node;
-  let properties = 0;
   const suggestRoots = [];
   const assetPointers = [];
   walkDataSchema(schema, (node, info) => {
@@ -65,7 +64,6 @@ export function inspectOutputData(schema) {
       if (Object.keys(node).some((key) => !['$ref', 'title', 'description', 'x-clack-i18n', 'x-clack-visibility'].includes(key))) note(at, 'ref_extra_keys');
       return;
     }
-    if (!info.branch) properties++;
     if (Array.isArray(node.oneOf)) {
       const discriminator = node['x-clack-discriminator'];
       if (!discriminator) note(at, 'one_of_discriminator_missing');
@@ -109,7 +107,6 @@ export function inspectOutputData(schema) {
       suggestRoots.push(at);
     }
   });
-  if (properties > OUTPUT_DATA_LIMITS.properties) note('/', 'properties_over');
   // AI 제안 대상 하위 트리에는 자산 노드를 두지 않는다(출력 스키마 파생을 단순하게 유지, 계약 §4-6).
   for (const root of suggestRoots) if (assetPointers.some((asset) => asset === root || asset.startsWith(`${root}/`))) note(root, 'ai_suggest_has_asset');
   return errors;

@@ -32,8 +32,7 @@
       "additionalProperties": {
         "$ref": "#/$defs/rootField"
       },
-      "minProperties": 1,
-      "maxProperties": 60
+      "minProperties": 1
     },
     "required": {
       "$ref": "#/$defs/keyList"
@@ -46,8 +45,7 @@
       },
       "additionalProperties": {
         "$ref": "#/$defs/node"
-      },
-      "maxProperties": 64
+      }
     }
   },
   "required": [
@@ -222,8 +220,7 @@
           },
           "additionalProperties": {
             "$ref": "#/$defs/node"
-          },
-          "maxProperties": 60
+          }
         },
         "required": {
           "$ref": "#/$defs/keyList"

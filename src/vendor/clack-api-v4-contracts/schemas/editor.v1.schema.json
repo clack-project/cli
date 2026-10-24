@@ -48,13 +48,13 @@
     },
     "pointer": {
       "type": "string",
-      "pattern": "^(?:/(?:[a-z][a-z0-9_]{0,31}|0|[1-9][0-9]{0,5}))+$",
+      "pattern": "^(?:/(?:[a-z][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,5}))+$",
       "maxLength": 512,
-      "description": "JSON Pointer(RFC 6901) 허용 부분집합(계약 §4-3). 세그먼트는 데이터 키(^[a-z][a-z0-9_]{0,31}$) 또는 배열 인덱스(0 또는 앞자리 0 없는 수)만 쓴다. 이스케이프(~0·~1)·루트(\"\")·배열 끝 \"-\"는 허용하지 않는다. 서버는 같은 세그먼트 규칙을 다시 검사하고 null-prototype 객체에 적용한다."
+      "description": "JSON Pointer(RFC 6901) 허용 부분집합(계약 §4-3). 세그먼트는 데이터 키(^[a-z][a-z0-9_-]{0,31}$) 또는 배열 인덱스(0 또는 앞자리 0 없는 수)만 쓴다. 이스케이프(~0·~1)·루트(\"\")·배열 끝 \"-\"는 허용하지 않는다. 서버는 같은 세그먼트 규칙을 다시 검사하고 null-prototype 객체에 적용한다."
     },
     "appendPointer": {
       "type": "string",
-      "pattern": "^(?:/(?:[a-z][a-z0-9_]{0,31}|0|[1-9][0-9]{0,5}))*/(?:(?:[a-z][a-z0-9_]{0,31}|0|[1-9][0-9]{0,5})|-)$",
+      "pattern": "^(?:/(?:[a-z][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,5}))*/(?:(?:[a-z][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,5})|-)$",
       "maxLength": 512,
       "description": "pointer와 같되 마지막 세그먼트에 배열 끝 추가 \"-\"를 허용한다(add·move의 path만)."
     },
@@ -73,7 +73,8 @@
     "tier": {
       "enum": [
         "economy",
-        "performance"
+        "performance",
+        "quality"
       ]
     },
     "imageMime": {
@@ -615,7 +616,7 @@
             "properties": {
               "key": {
                 "type": "string",
-                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
               },
               "required": {
                 "type": "boolean"
@@ -629,8 +630,7 @@
               "required",
               "filled"
             ]
-          },
-          "maxItems": 60
+          }
         },
         "limits": {
           "type": "object",

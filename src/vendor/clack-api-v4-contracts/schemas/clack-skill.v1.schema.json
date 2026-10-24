@@ -213,7 +213,8 @@
                 "type": "string",
                 "enum": [
                   "economy",
-                  "performance"
+                  "performance",
+                  "quality"
                 ]
               },
               "minItems": 1,
@@ -223,7 +224,8 @@
               "type": "string",
               "enum": [
                 "economy",
-                "performance"
+                "performance",
+                "quality"
               ]
             }
           },
@@ -352,7 +354,7 @@
         "editor": {
           "type": "object",
           "additionalProperties": false,
-          "description": "스킬 에디터(전체 화면 제작 UI) 선언. v1은 template 스킬 전용이며 제작 폼·플러그인 패널과 함께 쓸 수 없다. 번들 규칙(디렉터리면 {bundle}/index.html 진입, sha256 계산법)은 authoring.plugin과 같다.",
+          "description": "전용 편집기 선언. form_binding v1을 명시하면 기존 폼과 원본·revision을 공유한다. 선언하지 않은 기존 문서형은 센터 전용이다.",
           "properties": {
             "bundle": {
               "type": "string",
@@ -398,6 +400,29 @@
               "required": [
                 "ko"
               ]
+            },
+            "form_binding": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "const": 1
+                },
+                "default_view": {
+                  "enum": [
+                    "editor",
+                    "form"
+                  ]
+                },
+                "allow_form": {
+                  "const": true
+                }
+              },
+              "required": [
+                "version",
+                "default_view",
+                "allow_form"
+              ]
             }
           },
           "required": [
@@ -405,6 +430,31 @@
             "sha256",
             "permissions",
             "purpose"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "form_binding"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "permissions": {
+                    "items": {
+                      "enum": [
+                        "document.read",
+                        "document.write",
+                        "assets.read",
+                        "assets.pick",
+                        "preview",
+                        "package"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
           ]
         },
         "common": {
@@ -758,8 +808,7 @@
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_-]{0,31}$"
               },
-              "uniqueItems": true,
-              "maxItems": 60
+              "uniqueItems": true
             }
           },
           "required": [
@@ -1072,6 +1121,19 @@
                     "form"
                   ]
                 }
+              },
+              {
+                "required": [
+                  "form",
+                  "editor"
+                ],
+                "properties": {
+                  "editor": {
+                    "required": [
+                      "form_binding"
+                    ]
+                  }
+                }
               }
             ],
             "properties": {
@@ -1138,71 +1200,110 @@
         ]
       },
       "then": {
-        "properties": {
-          "type": {
-            "const": "template"
-          },
-          "authoring": {
-            "properties": {
-              "surfaces": {
-                "items": {
-                  "const": "center"
-                },
-                "maxItems": 1
+        "if": {
+          "properties": {
+            "authoring": {
+              "properties": {
+                "editor": {
+                  "required": [
+                    "form_binding"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "type": {
+              "const": "template"
+            },
+            "authoring": {
+              "required": [
+                "form"
+              ],
+              "not": {
+                "required": [
+                  "plugin"
+                ]
               }
             },
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "form"
-                  ]
-                },
-                {
-                  "required": [
-                    "plugin"
-                  ]
-                }
-              ]
+            "output": {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              }
             }
-          },
-          "output": {
-            "required": [
-              "data"
-            ],
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "asset_slots"
-                  ]
-                },
-                {
-                  "required": [
-                    "derive"
-                  ]
-                },
-                {
-                  "required": [
-                    "profile_select"
-                  ]
-                },
-                {
-                  "required": [
-                    "entity"
-                  ]
-                },
-                {
-                  "required": [
-                    "entity_map"
-                  ]
-                },
-                {
-                  "required": [
-                    "intro"
-                  ]
+          }
+        },
+        "else": {
+          "properties": {
+            "type": {
+              "const": "template"
+            },
+            "authoring": {
+              "properties": {
+                "surfaces": {
+                  "items": {
+                    "const": "center"
+                  },
+                  "maxItems": 1
                 }
-              ]
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "form"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "plugin"
+                    ]
+                  }
+                ]
+              }
+            },
+            "output": {
+              "required": [
+                "data"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "asset_slots"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "derive"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "profile_select"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "entity"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "entity_map"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "intro"
+                    ]
+                  }
+                ]
+              }
             }
           }
         }
