@@ -7,6 +7,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { unzipSync, zipSync } from 'fflate';
 import { parseDocument } from 'yaml';
 import { CliError } from '../core/errors.js';
+import { computeEditorHash, inspectEditorSkill, type EditorSummary } from './skill-editor.js';
 import skillSchema from '../vendor/clack-api-v4-contracts/schemas/clack-skill.v1.schema.json' with { type: 'json' };
 import formSchema from '../vendor/clack-api-v4-contracts/schemas/authoring-form.v1.schema.json' with { type: 'json' };
 import contentSchema from '../vendor/clack-api-v4-contracts/schemas/clack-content.v1.schema.json' with { type: 'json' };
@@ -14,6 +15,7 @@ import contentSchema from '../vendor/clack-api-v4-contracts/schemas/clack-conten
 const MAX_ZIP = 10 * 1024 * 1024;
 const MAX_EXPANDED = 30 * 1024 * 1024;
 const MAX_FILES = 500;
+const MAX_ZIP_ENTRIES = 2000;
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 ajv.addSchema(contentSchema);
@@ -27,7 +29,13 @@ export type PreparedSkillPackage = {
   manifest: Manifest;
   file_count: number;
   total_bytes: number;
+  /** 에디터 스킬(authoring.editor)이면 로컬 검사 요약. 최종 판정은 서버 정적 검사(editor-static-v1). */
+  editor?: EditorSummary;
+  warnings?: string[];
+  /** fillEditorHash가 sha256을 채운 매니페스트 바이트(디렉터리 소스에서만). */
+  filled_manifest?: Uint8Array;
 };
+export type PrepareOptions = { fillEditorHash?: boolean };
 
 function invalid(message: string): never { throw new CliError(message, 'SKILL_PACKAGE_INVALID'); }
 function hash(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -64,6 +72,18 @@ export function skillPathAllowed(path: string): boolean {
   return true;
 }
 
+/** 압축 도구가 덧붙이는 부가 파일만 제외한다: 맨 위 구성요소 `__MACOSX`, 어디서든 파일 이름 `.DS_Store`·`._*`. 그 밖의 숨김 파일은 그대로 거부한다. */
+export function isArchiveMetadata(path: string): boolean {
+  const parts = path.split('/');
+  const name = parts.at(-1) ?? '';
+  return parts[0] === '__MACOSX' || name === '.DS_Store' || name.startsWith('._');
+}
+
+/** 부가 파일 아래여도 거부하는 위험 경로(절대 경로·`..`·제어 문자). */
+function unsafeArchivePath(path: string): boolean {
+  return path.startsWith('/') || /[\p{Cc}]/u.test(path) || path.split('/').includes('..');
+}
+
 async function collectFiles(directory: string): Promise<Record<string, Uint8Array>> {
   const files: Record<string, Uint8Array> = {};
   let totalBytes = 0;
@@ -71,6 +91,7 @@ async function collectFiles(directory: string): Promise<Record<string, Uint8Arra
     const entries = await readdir(join(directory, relative), { withFileTypes: true });
     for (const entry of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
       const path = relative ? `${relative}/${entry.name}` : entry.name;
+      if (isArchiveMetadata(path)) continue;
       if (!skillPathAllowed(path)) invalid(`허용되지 않는 패키지 경로: ${path}`);
       if (entry.isSymbolicLink() || !(entry.isDirectory() || entry.isFile())) invalid(`일반 파일·폴더만 허용됩니다: ${path}`);
       if (entry.isDirectory()) { await walk(path); continue; }
@@ -85,24 +106,52 @@ async function collectFiles(directory: string): Promise<Record<string, Uint8Arra
   return files;
 }
 
-function inspectZip(bytes: Uint8Array, expectedDirectory?: string): Omit<PreparedSkillPackage, 'bytes' | 'sha256'> {
+function inspectZip(bytes: Uint8Array, expectedDirectory: string | undefined, hashMismatch: 'error' | 'warn'): Omit<PreparedSkillPackage, 'bytes' | 'sha256'> {
   if (!bytes.length || bytes.length > MAX_ZIP) invalid('스킬 ZIP은 비어 있지 않은 10 MiB 이하 파일이어야 합니다.');
-  const seen = new Set<string>();
-  let entries = 0;
-  let totalBytes = 0;
-  let extracted: Record<string, Uint8Array>;
+  // 1차 순회: 해제 없이 경로만 본다. 위험 경로 거부, 부가 파일 제외, 바깥 폴더 판정.
+  const raw: { name: string; dir: boolean }[] = [];
   try {
-    extracted = unzipSync(bytes, { filter(entry) {
-      entries++;
-      if (entries > MAX_FILES) invalid('스킬 파일 수가 500개를 초과했습니다.');
-      const path = entry.name.endsWith('/') ? entry.name.slice(0, -1) : entry.name;
-      if (!skillPathAllowed(path) || seen.has(path.toLowerCase())) invalid(`허용되지 않는 ZIP 경로: ${path}`);
-      seen.add(path.toLowerCase());
-      if (entry.name.endsWith('/')) return false;
+    unzipSync(bytes, { filter(entry) {
+      if (raw.length >= MAX_ZIP_ENTRIES) invalid('ZIP 항목 수가 2,000개를 초과했습니다.');
+      const dir = entry.name.endsWith('/');
+      raw.push({ name: dir ? entry.name.slice(0, -1) : entry.name, dir });
+      return false;
+    } });
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    return invalid('ZIP 구조를 읽을 수 없습니다.');
+  }
+  for (const { name } of raw) if (unsafeArchivePath(name)) invalid(`허용되지 않는 ZIP 경로: ${name.replace(/\p{C}/gu, '').slice(0, 160)}`);
+  const kept = raw.filter(({ name }) => !isArchiveMetadata(name));
+  const keptFiles = kept.filter(({ dir }) => !dir);
+  if (keptFiles.length > MAX_FILES) invalid('스킬 파일 수가 500개를 초과했습니다.');
+  // 부가 파일을 뺀 모든 파일이 한 폴더 아래에 있고 그 폴더에 SKILL.md와 clack.skill.json이 있을 때만 한 겹 벗긴다.
+  let prefix = '';
+  const top = keptFiles[0]?.name.split('/')[0];
+  if (top && keptFiles.every(({ name }) => name.startsWith(`${top}/`))) {
+    const names = new Set(keptFiles.map(({ name }) => name));
+    if (names.has(`${top}/SKILL.md`) && names.has(`${top}/clack.skill.json`)) prefix = `${top}/`;
+  }
+  const seen = new Set<string>();
+  const wanted = new Map<string, string>();
+  for (const { name, dir } of kept) {
+    if (dir && prefix && name === prefix.slice(0, -1)) continue;
+    const path = prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name;
+    if (!skillPathAllowed(path) || seen.has(path.toLowerCase())) invalid(`허용되지 않는 ZIP 경로: ${path}`);
+    seen.add(path.toLowerCase());
+    if (!dir) wanted.set(name, path);
+  }
+  // 2차 순회: 남긴 파일만 해제한다.
+  let totalBytes = 0;
+  const extracted: Record<string, Uint8Array> = {};
+  try {
+    const content = unzipSync(bytes, { filter(entry) {
+      if (!wanted.has(entry.name)) return false;
       totalBytes += entry.originalSize;
       if (totalBytes > MAX_EXPANDED) invalid('스킬 압축 해제 용량이 30 MiB를 초과했습니다.');
       return true;
     } });
+    for (const [name, data] of Object.entries(content)) extracted[wanted.get(name)!] = data;
   } catch (error) {
     if (error instanceof CliError) throw error;
     return invalid('ZIP 구조를 읽을 수 없습니다.');
@@ -143,7 +192,13 @@ function inspectZip(bytes: Uint8Array, expectedDirectory?: string): Omit<Prepare
   const authoring = manifest.authoring as Record<string, unknown>;
   const output = manifest.output as Record<string, unknown>;
   for (const reference of authoring.references as string[] | undefined ?? []) file(reference, 64 * 1024);
-  if (manifest.type === 'template' || manifest.type === 'tool') {
+  let editor: ReturnType<typeof inspectEditorSkill> | undefined;
+  if (manifest.type === 'template' && authoring.editor) {
+    editor = inspectEditorSkill(manifest, extracted, { hashMismatch });
+    file(`runtime/${(output.template as Record<string, unknown>).entry}`);
+    const runtime = manifest.runtime as Record<string, unknown>;
+    for (const profile of runtime.profiles as string[]) file(`runtime/.clack/profiles/${profile}.yaml`, 16 * 1024);
+  } else if (manifest.type === 'template' || manifest.type === 'tool') {
     const form = json(file(authoring.form, 64 * 1024), 64 * 1024, '제작 폼');
     if (!validateForm(form)) invalid('제작 폼이 공개 스키마와 일치하지 않습니다.');
     const semanticErrors = inspectAuthoringSemantics(manifest, form);
@@ -166,21 +221,47 @@ function inspectZip(bytes: Uint8Array, expectedDirectory?: string): Omit<Prepare
       invalid('제작 폼과 예시 데이터가 일치하지 않습니다.');
     }
   }
-  return { manifest: manifest as Manifest, file_count: Object.keys(extracted).length, total_bytes: totalBytes };
+  return { manifest: manifest as Manifest, file_count: Object.keys(extracted).length, total_bytes: totalBytes,
+    ...(editor ? { editor: editor.summary, warnings: editor.warnings } : {}) };
 }
 
-export async function prepareSkillPackage(source: string): Promise<PreparedSkillPackage> {
+/** 디렉터리의 에디터 번들 해시를 계산해 매니페스트의 `authoring.editor.sha256`을 채운다. 바뀐 매니페스트 바이트를 돌려준다(변화가 없으면 null). */
+function fillEditorHash(files: Record<string, Uint8Array>): Uint8Array | null {
+  const manifestBytes = files['clack.skill.json'];
+  if (!manifestBytes) return null;
+  let text: string;
+  let manifest: unknown;
+  try { text = textDecoder.decode(manifestBytes); manifest = JSON.parse(text); } catch { return null; }
+  if (!object(manifest)) return null;
+  const computed = computeEditorHash(manifest, files);
+  const editor = object(manifest.authoring) ? manifest.authoring.editor : undefined;
+  if (!computed || !object(editor) || typeof editor.sha256 !== 'string' || editor.sha256 === computed) return null;
+  const declared = editor.sha256;
+  // 원본 서식을 지키려고 선언된 해시 문자열이 한 번만 나올 때만 문자열 치환한다.
+  const next = text.split(declared).length === 2 ? text.replace(declared, computed)
+    : `${JSON.stringify({ ...manifest, authoring: { ...(manifest.authoring as object), editor: { ...editor, sha256: computed } } }, null, 2)}\n`;
+  return new TextEncoder().encode(next);
+}
+
+export async function prepareSkillPackage(source: string, options: PrepareOptions = {}): Promise<PreparedSkillPackage> {
   const path = resolve(source);
   let info;
   try { info = await lstat(path); } catch { return invalid('스킬 디렉터리 또는 ZIP 파일을 읽을 수 없습니다.'); }
   if (info.isSymbolicLink()) invalid('스킬 경로는 심볼릭 링크일 수 없습니다.');
   let bytes: Buffer;
+  let filledManifest: Uint8Array | undefined;
   if (info.isDirectory()) {
     const files = await collectFiles(path);
     if (!Object.keys(files).length) invalid('스킬 디렉터리가 비어 있습니다.');
+    if (options.fillEditorHash) {
+      const filled = fillEditorHash(files);
+      if (filled) { files['clack.skill.json'] = filled; filledManifest = filled; }
+    }
     bytes = Buffer.from(zipSync(files, { level: 6, mtime: new Date(2000, 0, 1) }));
   } else if (info.isFile() && extname(path).toLowerCase() === '.zip') bytes = await readRegular(path);
   else return invalid('스킬 디렉터리 또는 ZIP 파일을 지정하세요.');
-  const inspected = inspectZip(bytes, info.isDirectory() ? basename(path) : undefined);
-  return { bytes, sha256: hash(bytes), ...inspected };
+  // 디렉터리 검사(채우기 전)는 해시 불일치를 경고로만 알린다. pack·push가 값을 채우고, ZIP은 바꿀 수 없어 오류다.
+  const inspected = inspectZip(bytes, info.isDirectory() ? basename(path) : undefined,
+    info.isDirectory() && !options.fillEditorHash ? 'warn' : 'error');
+  return { bytes, sha256: hash(bytes), ...inspected, ...(filledManifest ? { filled_manifest: filledManifest } : {}) };
 }

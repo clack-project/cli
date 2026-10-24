@@ -98,6 +98,33 @@ function withPlatformServerSubset(source, content) {
     + extractPlatformServerTypes(source, content);
 }
 
+// 모노레포 validators.mjs는 스키마 디렉터리를 런타임에 fs로 읽으므로 번들·배포되는 CLI가 그대로 쓸 수 없다.
+// 데이터 스키마(output-data.v1) 검사 함수 `inspectOutputData`(서버·센터·CLI 공용 판정)와 공개 데이터 금지 문자
+// 검사 `inspectPublicDataStrings`가 놓인 구간만 표식으로 잘라 fs·ajv 의존 없는 독립 모듈로 만든다.
+const OUTPUT_DATA_START = '// 스킬 에디터 데이터 문서 스키마(output-data.v1)';
+const OUTPUT_DATA_END = '// 스킬 에디터 호스트 프로토콜(editor.v1)';
+function extractOutputDataInspect(source, content) {
+  const start = content.indexOf(OUTPUT_DATA_START);
+  const end = content.indexOf(OUTPUT_DATA_END);
+  if (start < 0 || end < start) throw new Error(`${source}에서 데이터 스키마 검사 구간 표식을 찾을 수 없습니다.`);
+  const slice = content.slice(start, end);
+  if (!slice.includes('function inspectOutputData(') || !slice.includes('export function inspectPublicDataStrings(')) {
+    throw new Error(`${source}의 검사 구간에 inspectOutputData·inspectPublicDataStrings가 없습니다.`);
+  }
+  return `// 모노레포 ${source}의 데이터 스키마 검사 구간만 scripts/sync-vendor-types.mjs로 추출한 파일이다. 직접 수정하지 않는다.\n`
+    + `import { walkDataSchema } from './authoring-semantics.mjs';\n`
+    + `const bytes = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8');\n`
+    + `const fail = (path, message) => ({ path, message });\n`
+    + slice.replace('function inspectOutputData(', 'export function inspectOutputData(');
+}
+const OUTPUT_DATA_DTS = `/** 모노레포 validators.mjs의 검사 구간에서 추출한 선언. scripts/sync-vendor-types.mjs가 만든다. */
+export const OUTPUT_DATA_LIMITS: { schema_bytes: number; depth: number; properties: number; public_bytes: number; private_bytes: number; ui_state_bytes: number };
+/** 데이터 문서 스키마(output-data.v1)의 메타 스키마로 표현할 수 없는 규칙 검사. 오류가 없으면 빈 배열. */
+export function inspectOutputData(schema: Record<string, unknown>): Array<{ path: string; message: string }>;
+/** 공개 데이터 문자열 잎 중 금지 문자가 있는 JSON Pointer 목록. */
+export function inspectPublicDataStrings(value: unknown): string[];
+`;
+
 // [모노레포 상대 경로, vendor 목적지 상대 경로, 변환 함수]. vendor/ 아래 구성의 단일 원본 목록이다.
 const ENTRIES = [
   { source: 'clack-types/models/channel.ts', dest: 'src/vendor/clack-types/models/channel.ts', transform: withTsHeader },
@@ -110,6 +137,10 @@ const ENTRIES = [
   { source: 'clack-api-v4/contracts/platform/schemas/clack-skill.v1.schema.json', dest: 'src/vendor/clack-api-v4-contracts/schemas/clack-skill.v1.schema.json', transform: withJsonComment },
   { source: 'clack-api-v4/contracts/platform/schemas/authoring-form.v1.schema.json', dest: 'src/vendor/clack-api-v4-contracts/schemas/authoring-form.v1.schema.json', transform: withJsonComment },
   { source: 'clack-api-v4/contracts/platform/schemas/clack-content.v1.schema.json', dest: 'src/vendor/clack-api-v4-contracts/schemas/clack-content.v1.schema.json', transform: withJsonComment },
+  { source: 'clack-api-v4/contracts/platform/schemas/output-data.v1.schema.json', dest: 'src/vendor/clack-api-v4-contracts/schemas/output-data.v1.schema.json', transform: withJsonComment },
+  { source: 'clack-api-v4/contracts/platform/schemas/editor.v1.schema.json', dest: 'src/vendor/clack-api-v4-contracts/schemas/editor.v1.schema.json', transform: withJsonComment },
+  { source: 'clack-api-v4/contracts/platform/validators.mjs', dest: 'src/vendor/clack-api-v4-contracts/output-data-inspect.mjs', transform: extractOutputDataInspect },
+  { source: 'clack-api-v4/contracts/platform/validators.mjs', dest: 'src/vendor/clack-api-v4-contracts/output-data-inspect.d.mts', transform: () => OUTPUT_DATA_DTS },
 ];
 
 if (!existsSync(monorepoDir)) {

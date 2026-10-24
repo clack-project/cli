@@ -55,7 +55,8 @@ try {
   else {
     const failure = error instanceof CommanderError ? new CliError(error.message, 'INVALID_ARGUMENT') : asCliError(error);
     const envelope = redact({ ok: false, status: failure.status, code: failure.code, message: failure.message,
-      ...(failure.retryAfter ? { retry_after: failure.retryAfter } : {}) });
+      ...(failure.retryAfter ? { retry_after: failure.retryAfter } : {}),
+      ...(failure.recovery ? { recovery: failure.recovery } : {}) });
     const json = program.opts().json || process.argv.includes('--json') || await store.resolve(program.opts(), true).then(value => value.options.json).catch(() => false);
     if (json) process.stdout.write(JSON.stringify(envelope) + '\n');
     else process.stderr.write(redactText(`[${failure.code}] ${failure.message}\n`));

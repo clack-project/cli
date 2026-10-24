@@ -11,8 +11,8 @@ import { registerSkillCommands } from '../src/commands/skill.js';
 const EXPECTED: Record<string, Record<string, string[]>> = {
   content: {
     list: ['creator-content:read'], status: ['creator-content:read'], preview: ['creator-content:read'],
-    create: ['creator-content:write'], upload: ['creator-content:write'], complete: ['creator-content:write'],
-    withdraw: ['creator-content:write'], submit: ['creator-content:write', 'creator-content:publish'],
+    create: ['creator-content:write'], update: ['creator-content:write'], upload: ['creator-content:write'], complete: ['creator-content:write'],
+    'info-version': ['creator-content:write'], withdraw: ['creator-content:write'], submit: ['creator-content:write', 'creator-content:publish'],
     publish: ['creator-content:publish'], unpublish: ['creator-content:publish'],
     'server-keys list': ['platform:read'], 'server-keys revoke': ['platform:write'],
     'shared collections': ['platform:read'], 'shared list': ['platform:read'], 'shared get': ['platform:read'],

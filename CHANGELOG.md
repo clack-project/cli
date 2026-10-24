@@ -1,5 +1,59 @@
 # 변경 이력
 
+## 0.3.6
+
+- 모든 콘텐츠의 기본 헤더 동작을 세 손가락 탭으로 통일한 정책에 맞춰 도움말과 문서를 갱신했습니다.
+- 인트로 없는 일러스트·글의 추가 좋아요·댓글 영역을 안내합니다.
+
+## 0.3.5 — 2026-10-19
+
+- 콘텐츠 생성·수정의 `--header-visibility always|gesture|auto`를 추가했습니다. 헤더 설정만 바꿀 때는 새 버전·재심사 없이 다음 실행부터 적용합니다.
+
+
+## 0.3.4
+
+- 공개 콘텐츠 검색·허가 확인·선택 이미지 다운로드와 출처 명세 저장을 추가했습니다.
+- 다운로드의 형식·해시·크기·경로를 검사하고 철회·목적·버전을 고정합니다.
+- 공개 캐릭터 공통 항목을 편집 초안에 복사하는 명령을 추가했습니다.
+- 공유 제작 계약을 최신 서버 정의와 동기화했습니다.
+
+## 0.3.3
+
+- `content thumbnail <파일> [--content <UUID>]`로 썸네일을 업로드하고 기존 콘텐츠에 연결한다. `content create/update --thumbnail-file`도 지원한다. 일반 이미지 업로드와 구분하며 서버가 공개한 형식·용량·픽셀 제한을 먼저 검사한다.
+- 업로드 후 콘텐츠 연결에 실패하면 발급한 썸네일 ID, 원래 환경·프로필·입력값을 유지한 재연결 명령과 상태 조회 명령을 구조화된 `recovery`로 제공한다. 다시 업로드하지 않고 `--thumbnail-id`로 복구할 수 있다.
+- `--dry-run`은 업로드·콘텐츠 변경을 하지 않고 공개 설정과 파일 조건만 확인한다. `--thumbnail-id none`으로 기본 썸네일을 명시적으로 선택할 수 있다.
+
+## 0.3.2
+
+- 공유 제작 계약 사본을 최신으로 맞췄다. 스킬 매니페스트 `output.intro.sections`(`how_to`·`notice`·`character`·`setting`·`relationship`·`first_scene`)를 인식해, 공개 문자열 폼 필드만 가리키는지·항목별 최대 2,000자·선언된 필드 최대 길이 합계 6,000자를 서버와 같이 검사한다.
+- 스킬 패키지 검사가 압축 도구가 덧붙이는 부가 파일(스킬 맨 위의 `__MACOSX` 폴더, 어느 위치든 파일 이름 `.DS_Store`, `._`로 시작하는 파일 이름)을 무시한다. 폴더·ZIP 모두 해당하며 파일 수는 부가 파일을 뺀 실파일로 센다(ZIP 원시 항목은 2,000개까지). ZIP은 부가 파일을 뺀 모든 파일이 한 폴더 아래에 있고 그 폴더에 `SKILL.md`와 `clack.skill.json`이 있으면 바깥 폴더 한 겹을 벗겨 검사한다. 절대 경로·`..`·제어 문자는 부가 파일 아래여도 거부하고, `.git`·`.env` 같은 그 밖의 숨김 파일도 계속 거부한다.
+- 하위 폴더의 `references/__MACOSX/…`는 부가 파일이 아니라 일반 경로로 취급한다. 바깥 폴더를 벗긴 뒤 맨 위에 오는 `__MACOSX`는 `__` 시작 경로로 거부한다.
+- `skill push`의 `complete` 단계에서 서버가 검사 실패(4xx, 429 제외)로 돌려주면 같은 버전 ID 재시도 대신 패키지를 고쳐 같은 버전으로 다시 `clack skill push`하도록 안내한다. 5xx·429·연결 실패는 기존처럼 `skill complete` 재시도를 안내한다.
+- 서버 오류 응답에 `details`가 있으면 사유·파일·문제 위치(`issues`)·기대/실제 값을 오류 메시지 아래에 함께 출력한다.
+
+## 0.3.1
+
+- `clack authoring complete <session-id>`와 `clack authoring abandon <session-id>`를 추가했다(`creator-content:write`). 폼(template) 세션을 완성 또는 포기 상태로 종료하며, 서버의 세션 종료 API(`POST .../complete`)에 `outcome`(`completed`·`abandoned`)을 보낸다. `complete`는 현재 revision을 `package`한 뒤에 쓴다. `abandon`은 확인 질문을 거치며 비대화형 실행에서는 `--yes`가 필요하다. 기존 `--input <file>` 방식도 `{"action":"complete"}`·`{"action":"abandon"}`으로 같은 동작을 지원한다. `--input`은 필수에서 선택으로 바뀌었고 하위 명령과 함께 쓸 수 없다. 입력 형식은 실제 실행에서도 요청 전에 검사해 `VALIDATION_ERROR`로 알린다.
+- 로컬 플랫폼 MCP의 `platform_authoring` 도구에 `complete`·`abandon` action을 추가했다. `abandon`은 `confirm:true`를 보내야 실행하고, 없으면 미리보기(`confirmation_required`)만 돌려준다. 도구 설명과 `destructiveHint`도 이에 맞게 고쳤다.
+- 종료 관련 서버 오류에 다음에 할 일을 안내한다. `SESSION_REQUIRED`(에디터·지침형 스킬은 크리에이터 센터에서 작업), `AUTHORING_NOT_PACKAGED`(`package` 실행 후 `complete`), `AUTHORING_SESSION_LOCKED`(`get`으로 상태 확인, 이미 종료된 세션은 다시 편집·종료 불가).
+- README에 제작 세션 종료 사용법과 오류 코드(`SESSION_REQUIRED`·`AUTHORING_NOT_FOUND`·`AUTHORING_NOT_PACKAGED`·`AUTHORING_SESSION_LOCKED`)를 추가했다.
+- `content info-version`의 HTTP 200 재사용 안내를 같은 정보의 미게시 버전(초안·심사 중·승인 미게시)으로 바로잡았다. 응답의 `created`를 그대로 출력하는 동작은 유지한다.
+
+## 0.3.0
+
+- `content update <id>`를 추가했다. 콘텐츠 제목·설명·종류·썸네일·메타데이터(대표 언어·언어별 제목/설명)·태그를 서버 PATCH와 같은 필드·길이 규칙으로 수정한다(`creator-content:write`). 서버가 거부할 입력은 요청 전에 막는다.
+- `content info-version <id> <version-id>`를 추가했다. 승인·반려된 버전의 번들을 재사용해 바뀐 정보만 담은 새 초안 버전을 만든다(`creator-content:write`). 게이트가 꺼진 환경의 `CONTENT_INFO_VERSION_DISABLED`, 바뀐 정보가 없는 `CONTENT_INFO_UNCHANGED`, 언어별 메타데이터 게이트 `CONTENT_METADATA_EXTRAS_DISABLED`는 다음에 할 일을 안내한다.
+- 공유 제작 계약 사본을 최신으로 맞췄다. 스킬 매니페스트 `display`의 다국어 키(`description`·`tags_i18n`·`release_notes`)를 허용한다(`tags_i18n`은 `tags`가 있어야 한다). 공식 캐릭터챗 2.2.1 폼의 다국어 안내·자리표시 키(`x-clack-help-i18n`, `x-clack-placeholder-i18n`)를 `skill validate`·`skill pack`·`skill push`가 통과시키고, 인트로 자동 구성 라벨 길이를 서버와 같이 언어별 최댓값으로 계산한다.
+
+## 0.2.0
+
+- 스킬 에디터(`authoring.editor`) 스킬을 로컬에서 검사한다. `skill validate`·`skill pack`·`skill push`가 에디터 번들 구조·한도(파일 50개·파일 512 KiB·전체 2 MiB·코드 512 KiB)·번들 해시, 데이터 스키마(`output-data.v1`)·예시 문서를 서버와 같은 공유 계약으로 판정하고, 지연 로드 의심(`loading="lazy"`·동적 `import()`·CSS `url()`)은 경고로 알린다. 에디터 코드 정적 검사(`editor-static-v1`)와 심사는 서버 판정이 최종이다.
+- `skill pack`이 ZIP을 만들면서 `authoring.editor.sha256`을 번들 해시로 채운다. `--write-manifest`로 채운 값을 `clack.skill.json`에도 기록한다. `skill push`도 같은 값을 채워 올린다.
+- `skill editor dev`를 추가했다. 스킬 에디터 SDK의 모의 호스트로 로컬에서 에디터를 열어 본다(로그인 불필요). SDK는 아직 npm에 공개되지 않아 `--sdk-dir`·`CLACK_SKILL_EDITOR_SDK_DIR`·`CLACK_MONOREPO_DIR`로 빌드한 SDK 위치를 지정한다(`--help`와 README에 안내).
+- `skill list`·`skill get`이 에디터 스킬에 `availability: "센터 전용"`을 표시한다. 에디터 스킬은 v1에서 크리에이터 센터에서만 제작할 수 있다.
+- 공유 제작 계약 사본을 최신으로 맞췄다. 스킬 패키지 검사가 콘텐츠 인트로 출력 선언(`output.intro`)을 인식·검사한다.
+- 헤더 표시에 `floating_close_safe_area`(전체 화면, 안전 영역 안쪽)를 추가했다. `content upload`·`page upload`·`page presentation`의 `--header`와 스킬 매니페스트 검사에서 쓸 수 있다.
+
 ## 0.1.1
 
 - 승인 대기 중 프로세스가 끝나도 발급한 로그인 요청을 저장해 두어(0600) `clack login --resume`으로 이어받을 수 있다. `clack login --no-wait`로 코드만 발급하고 바로 반환하는 모드도 추가했다. 만료·거부·이미 교부된 요청은 명확한 오류 코드로 처리하고 자동으로 새 요청을 만들지 않는다.

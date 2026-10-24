@@ -48,4 +48,6 @@ test('페이지 적용·복원·해제는 수정 번호를 보내고 심사에 �
   await commands(ctx)(['page', 'presentation', pageId, versionId, '--header', 'floating_close', '--color', 'dark']);
   assert.equal(calls.at(-1)?.path, `/v4/creator/custom-pages/${pageId}/versions/${versionId}/presentation`);
   assert.deepEqual(calls.at(-1)?.body, { presentation: { schema_version: 1, header_mode: 'floating_close', color_scheme: 'dark' } });
+  await commands(ctx)(['page', 'presentation', pageId, versionId, '--header', 'floating_close_safe_area', '--color', 'light']);
+  assert.deepEqual(calls.at(-1)?.body, { presentation: { schema_version: 1, header_mode: 'floating_close_safe_area', color_scheme: 'light' } });
 });
