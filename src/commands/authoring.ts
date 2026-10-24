@@ -22,7 +22,7 @@ export const authoringInput = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('image'), ...image, item_index: itemIndex.optional() }),
   z.strictObject({ action: z.literal('image-batch'), ...image, item_indexes: z.array(itemIndex).min(1).max(8).refine((values) => new Set(values).size === values.length) }),
   z.strictObject({ action: z.literal('tool'), ...session, call_id: z.uuid() }),
-  z.strictObject({ action: z.literal('fill'), ...session, revision, fields: z.array(field).max(60).optional(), instruction: z.string().max(4000).optional(), tier: z.enum(['economy', 'performance']).optional() }),
+  z.strictObject({ action: z.literal('fill'), ...session, revision, fields: z.array(field).optional(), instruction: z.string().max(4000).optional(), tier: z.enum(['economy', 'performance']).optional() }),
   z.strictObject({ action: z.literal('fill-status'), ...session, job_id: z.uuid() }),
   z.strictObject({ action: z.literal('package'), ...session, revision }),
 ]);

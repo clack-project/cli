@@ -98,13 +98,74 @@
           },
           "maxItems": 10,
           "uniqueItems": true
+        },
+        "description": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
+        },
+        "tags_i18n": {
+          "type": "object",
+          "properties": {
+            "en": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "minItems": 1,
+              "maxItems": 10,
+              "uniqueItems": true
+            }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
+        "release_notes": {
+          "type": "object",
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "ko"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "title",
         "summary",
         "category"
-      ]
+      ],
+      "dependentRequired": {
+        "tags_i18n": [
+          "tags"
+        ]
+      }
     },
     "authoring": {
       "type": "object",
@@ -152,7 +213,8 @@
                 "type": "string",
                 "enum": [
                   "economy",
-                  "performance"
+                  "performance",
+                  "quality"
                 ]
               },
               "minItems": 1,
@@ -162,7 +224,8 @@
               "type": "string",
               "enum": [
                 "economy",
-                "performance"
+                "performance",
+                "quality"
               ]
             }
           },
@@ -286,6 +349,223 @@
             "fields",
             "permissions",
             "purpose"
+          ]
+        },
+        "editor": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "전용 편집기 선언. form_binding v1을 명시하면 기존 폼과 원본·revision을 공유한다. 선언하지 않은 기존 문서형은 센터 전용이다.",
+          "properties": {
+            "bundle": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "permissions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "document.read",
+                  "document.write",
+                  "assets.read",
+                  "assets.pick",
+                  "ai.suggest",
+                  "tools.image.generate",
+                  "preview",
+                  "package"
+                ]
+              },
+              "minItems": 2,
+              "uniqueItems": true
+            },
+            "purpose": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ko": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "en": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "ko"
+              ]
+            },
+            "form_binding": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "const": 1
+                },
+                "default_view": {
+                  "enum": [
+                    "editor",
+                    "form"
+                  ]
+                },
+                "allow_form": {
+                  "const": true
+                }
+              },
+              "required": [
+                "version",
+                "default_view",
+                "allow_form"
+              ]
+            }
+          },
+          "required": [
+            "bundle",
+            "sha256",
+            "permissions",
+            "purpose"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "form_binding"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "permissions": {
+                    "items": {
+                      "enum": [
+                        "document.read",
+                        "document.write",
+                        "assets.read",
+                        "assets.pick",
+                        "preview",
+                        "package"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "common": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "공통 캐릭터 정보 수신 선언. 규격 clack.character.common v1: 센터가 한 번 입력한 공통 정보(fields)·콘텐츠 정보(listing)·공통 이미지(images)·인트로 첫 장면 연결 대상(opening)을 이 템플릿의 어느 폼 필드로 받을지 정합니다. 선언한 템플릿만 한 콘텐츠에 여러 개 연결하는 목록에 나옵니다. 폼 스킬(modes에 template, editor 없음) 전용이며 대상 필드의 가시성·위젯·상한은 의미 검사가 규격과 대조합니다.",
+          "properties": {
+            "spec": {
+              "const": "clack.character.common"
+            },
+            "spec_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "dialogue_box",
+                "messenger",
+                "novel",
+                "other"
+              ]
+            },
+            "fields": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "tagline": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "appearance": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "personality": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "speech_style": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "background": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "relationship": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "prohibitions": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                }
+              },
+              "required": [
+                "name",
+                "tagline"
+              ]
+            },
+            "listing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rating": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "tags": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "source_work": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                }
+              }
+            },
+            "images": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "portrait": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "cover": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "gallery": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                }
+              }
+            },
+            "opening": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            }
+          },
+          "required": [
+            "spec",
+            "spec_version",
+            "format",
+            "fields"
           ]
         }
       },
@@ -528,8 +808,7 @@
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_-]{0,31}$"
               },
-              "uniqueItems": true,
-              "maxItems": 60
+              "uniqueItems": true
             }
           },
           "required": [
@@ -548,7 +827,8 @@
                 "fixed",
                 "scroll_hide",
                 "translucent_scroll_hide",
-                "floating_close"
+                "floating_close",
+                "floating_close_safe_area"
               ]
             },
             "color_scheme": {
@@ -563,6 +843,120 @@
             "header_mode",
             "color_scheme"
           ]
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "스킬 에디터가 만드는 데이터 문서 선언. schema 파일은 output-data.v1 규칙을 따른다. 번들에는 공개 부분이 data/document.json, 비공개 최상위 키가 .clack/config.private.json, 자산이 data/assets/로 들어간다.",
+          "properties": {
+            "schema": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 262144
+            },
+            "private_max_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "assets": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "max_count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 48
+                },
+                "max_total_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 25165824
+                }
+              },
+              "required": [
+                "max_count",
+                "max_total_bytes"
+              ]
+            }
+          },
+          "required": [
+            "schema"
+          ]
+        },
+        "intro": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "콘텐츠 인트로(실행 전 기본 정보 화면) 출력 선언. 모든 키는 선택이다. creator_comment·description은 공개 문자열 폼 필드(최대 길이 500·5000 이하), description_fallback은 description 값이 비었을 때 순서대로 값이 있는 필드만 '{폼 필드 title}\\n{값}'을 빈 줄로 이어 상세 설명을 자동 구성할 문자열 폼 필드다(비공개 필드를 공개하는 유일한 명시 예외, 최대 길이 합과 라벨이 5000자 이하). images는 output.asset_slots의 field이며 슬롯 순서대로 펼친 제작 자산을 쓴다(단일 1장·multiple은 max장으로 세어 합계 8 이하). 폼 스킬 전용이며 에디터 스킬·지침형(instruction) 스킬은 쓸 수 없다.",
+          "properties": {
+            "default_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "creator_comment": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "description": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+            },
+            "description_fallback": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+              },
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true
+            },
+            "sections": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "공개 문자열 폼 필드를 소개 섹션에 매핑합니다. 항목별 최대 2,000자, 선언된 필드 최대 길이 합계 6,000자입니다.",
+              "properties": {
+                "how_to": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "notice": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "character": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "setting": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "relationship": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                },
+                "first_scene": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                }
+              }
+            }
+          }
         }
       },
       "required": [
@@ -598,7 +992,8 @@
               "ai.conversation",
               "ai.completion",
               "cash.purchase",
-              "ai.image"
+              "ai.image",
+              "media.image"
             ]
           },
           "uniqueItems": true
@@ -617,7 +1012,8 @@
               "ai.conversation",
               "ai.completion",
               "cash.purchase",
-              "ai.image"
+              "ai.image",
+              "media.image"
             ]
           },
           "uniqueItems": true
@@ -705,8 +1101,40 @@
         ],
         "properties": {
           "authoring": {
-            "required": [
-              "form"
+            "oneOf": [
+              {
+                "required": [
+                  "form"
+                ],
+                "not": {
+                  "required": [
+                    "editor"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "editor"
+                ],
+                "not": {
+                  "required": [
+                    "form"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "form",
+                  "editor"
+                ],
+                "properties": {
+                  "editor": {
+                    "required": [
+                      "form_binding"
+                    ]
+                  }
+                }
+              }
             ],
             "properties": {
               "modes": {
@@ -756,6 +1184,175 @@
         "required": [
           "runtime"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authoring": {
+            "required": [
+              "editor"
+            ]
+          }
+        },
+        "required": [
+          "authoring"
+        ]
+      },
+      "then": {
+        "if": {
+          "properties": {
+            "authoring": {
+              "properties": {
+                "editor": {
+                  "required": [
+                    "form_binding"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "type": {
+              "const": "template"
+            },
+            "authoring": {
+              "required": [
+                "form"
+              ],
+              "not": {
+                "required": [
+                  "plugin"
+                ]
+              }
+            },
+            "output": {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              }
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "type": {
+              "const": "template"
+            },
+            "authoring": {
+              "properties": {
+                "surfaces": {
+                  "items": {
+                    "const": "center"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "form"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "plugin"
+                    ]
+                  }
+                ]
+              }
+            },
+            "output": {
+              "required": [
+                "data"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "asset_slots"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "derive"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "profile_select"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "entity"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "entity_map"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "intro"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "output": {
+            "required": [
+              "data"
+            ]
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authoring": {
+            "required": [
+              "editor"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "instruction"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "output": {
+            "not": {
+              "required": [
+                "intro"
+              ]
+            }
+          }
+        }
       }
     }
   ]

@@ -48,6 +48,10 @@ export type PublicUserProfile = UserSummary & {
 };
 
 export type User = {
+  /** 가입 시 정한 서비스 범위. 언어 변경으로 바뀌지 않는다. */
+  service_region?: 'KR' | 'GLOBAL';
+  /** 앱에서 동기화한 화면 언어. 내 정보 조회에서만 제공한다. */
+  app_language?: 'ko' | 'en';
   id: number;
   type: string;
   uid: string | null;

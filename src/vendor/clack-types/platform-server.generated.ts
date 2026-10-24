@@ -6,7 +6,7 @@
 // 조건부 제약·문자열 패턴·수치 범위는 런타임 스키마 검증이 최종 기준입니다.
 
 export type PlatformApiDocument = { "collection": string; "key": string; "owner": string; "rev": number; "body": Record<string, unknown>; "created_at": string; "updated_at": string; };
-export type PlatformApiLeaderboard = { "field": string; "entries": Array<{ "rank": number; "key": string; "owner": string; "value": number; "body"?: Record<string, unknown>; }>; "me": ({ "rank": number; "value": number; }) | (null); };
+export type PlatformApiLeaderboard = { "rank_observed_at"?: string; "field": string; "entries": Array<{ "rank": number; "key": string; "owner": string; "value": number; "body"?: Record<string, unknown>; }>; "me": ({ "rank": number; "value": number; }) | (null); };
 
 export interface PlatformApiOperations {
   "getServerUsage": {
@@ -21,17 +21,17 @@ export interface PlatformApiOperations {
   };
   "putServerDocument": {
     method: "PUT"; path: "/platform/v1/data/{col}/docs/{key}";
-    pathParams: { "col": string; "key": string; }; query: { "viewer_id"?: string; }; headers: { "If-Match"?: string; "If-None-Match"?: "*"; };
+    pathParams: { "col": string; "key": string; }; query: { "viewer_id"?: string; }; headers: { "If-Match"?: string; "If-None-Match"?: "*"; "Idempotency-Key"?: string; };
     body: { "body": Record<string, unknown>; }; response: { "data": PlatformApiDocument; };
   };
   "patchServerDocument": {
     method: "PATCH"; path: "/platform/v1/data/{col}/docs/{key}";
-    pathParams: { "col": string; "key": string; }; query: { "viewer_id"?: string; }; headers: { "If-Match"?: string; };
+    pathParams: { "col": string; "key": string; }; query: { "viewer_id"?: string; }; headers: { "If-Match"?: string; "Idempotency-Key"?: string; };
     body: { "patch": Record<string, unknown>; }; response: { "data": PlatformApiDocument; };
   };
   "deleteServerDocument": {
     method: "DELETE"; path: "/platform/v1/data/{col}/docs/{key}";
-    pathParams: { "col": string; "key": string; }; query: { "viewer_id"?: string; }; headers: {  };
+    pathParams: { "col": string; "key": string; }; query: { "viewer_id"?: string; }; headers: { "Idempotency-Key"?: string; };
     body: null; response: null;
   };
   "listServerDocuments": {
